@@ -1,0 +1,9 @@
+[build]
+# Exclude heavy dev-only toolchain modules from server production bundle
+external = [
+  "vite",
+  "lightningcss",
+  "@babel/core",
+  "@babel/preset-typescript",
+  "@babel/*"
+]
