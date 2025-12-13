@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Focus Session Timeline (Plain HTML)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --prefocus-bg:#E4F0FF; --prefocus-border:#86B7F5; --prefocus-text:#114A85;
+    --acquire-bg:#D8E9FF; --acquire-border:#5B96EB; --acquire-text:#0E3C77;
+    --focus-bg:#D9F7E7; --focus-border:#55C48A; --focus-text:#0C5A35;
+    --distract-bg:#FFE8C8; --distract-border:#E2A14A; --distract-text:#8A5206;
+    --idle-bg:#ECECEC; --idle-border:#B8B8B8; --idle-text:#444;
+    --switch-low:#15803d; --switch-high:#dc2626; --highlight-ring:#2563eb;
+    --session-border:#1d4ed8; --session-bg:rgba(37,99,235,0.06);
+  }
+  body { font-family: system-ui,-apple-system,'Segoe UI',Arial,sans-serif; margin:24px; color:#222; background:#fafafa; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .subtitle { font-size:13px; color:#555; margin-bottom:18px; }
+  .layout { position:relative; }
+  .buckets-row { display:flex; gap:14px; align-items:stretch; }
+  .bucket { width:155px; border:1px solid #ccc; border-radius:10px; padding:10px 12px; background:#fff; position:relative; box-shadow:0 1px 2px rgba(0,0,0,.05); min-height:120px; }
+  .bucket.prefocus { background:var(--prefocus-bg); border-color:var(--prefocus-border); color:var(--prefocus-text); }
+  .bucket.acquire { background:var(--acquire-bg); border-color:var(--acquire-border); color:var(--acquire-text); }
+  .bucket.focus { background:var(--focus-bg); border-color:var(--focus-border); color:var(--focus-text); }
+  .bucket.distract { background:var(--distract-bg); border-color:var(--distract-border); color:var(--distract-text); }
+  .bucket.idle { background:var(--idle-bg); border-color:var(--idle-border); color:var(--idle-text); }
+  .bucket-header { display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:600; margin-bottom:4px; }
+  .bucket-state { font-size:12px; font-weight:600; letter-spacing:.3px; }
+  .dominant { display:inline-block; margin:2px 0 4px; font-size:11px; font-family:monospace; padding:2px 6px; background:rgba(255,255,255,.55); border-radius:4px; color:#111; }
+  .note { font-size:11px; line-height:1.25; }
+  .switch { font-size:14px; }
+  .switch.low { color:var(--switch-low); }
+  .switch.high { color:var(--switch-high); }
+
+  /* Data flow */
+  .data-flow { margin:12px 0 28px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:12px; }
+  .df-node { position:relative; background:#ffffff; border:1px solid #cbd5e1; padding:8px 14px; border-radius:20px; font-weight:600; color:#0f4473; box-shadow:0 1px 2px rgba(0,0,0,0.06); display:flex; align-items:center; gap:6px; }
+  .df-node span { font-size:10px; font-weight:500; color:#475569; letter-spacing:.3px; }
+  .df-arrow { font-size:16px; color:#64748b; font-weight:400; }
+  .df-node.raw { background:#f1f5f9; }
+  .df-node.buckets { background:var(--prefocus-bg); border-color:var(--prefocus-border); }
+  .df-node.statemachine { background:#eefce9; border-color:var(--focus-border); }
+  .df-node.session { background:#eff6ff; border-color:var(--session-border); }
+  .df-node.decision { background:#fff7ed; border-color:var(--distract-border); }
+  @media (max-width:820px){ .data-flow { gap:6px; } .df-arrow { display:none; } }
+  .flow-separator { height:1px; background:linear-gradient(90deg,#cbd5e1 0%,#e2e8f0 55%,#cbd5e1 100%); border:none; margin:14px 0 34px; width:100%; border-radius:1px; }
+
+  /* Session square */
+  .session-box { position:absolute; pointer-events:none; border:2px solid var(--session-border); background:var(--session-bg); border-radius:14px; box-shadow:0 0 0 4px rgba(29,78,216,0.12); }
+  .session-label { position:absolute; top:-18px; left:12px; font-size:11px; font-weight:600; color:var(--session-border); background:#fff; padding:3px 8px; border-radius:6px; border:1px solid var(--session-border); display:flex; gap:8px; align-items:center; }
+  .session-app-chip { background:var(--session-border); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600; letter-spacing:.3px; }
+
+  /* State machine summary */
+  .fsm { margin-top:26px; background:#f8fafc; border:1px solid #d3e0ec; padding:14px 16px; border-radius:10px; font-size:12px; line-height:1.45; }
+  .fsm h2 { margin:0 0 8px; font-size:14px; letter-spacing:.5px; text-transform:uppercase; color:#0f4473; }
+  .fsm dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; margin:0; }
+  .fsm dt { font-weight:600; color:#0f4473; }
+  .fsm dd { margin:0; }
+  .fsm .tag { display:inline-block; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; letter-spacing:.4px; background:#e2e8f0; color:#334155; }
+  .fsm .t-prefocus { background:var(--prefocus-bg); border:1px solid var(--prefocus-border); color:var(--prefocus-text); }
+  .fsm .t-focus { background:var(--focus-bg); border:1px solid var(--focus-border); color:var(--focus-text); }
+  .fsm .t-distract { background:var(--distract-bg); border:1px solid var(--distract-border); color:var(--distract-text); }
+  .fsm .t-idle { background:var(--idle-bg); border:1px solid var(--idle-border); color:var(--idle-text); }
+
+  /* Window summary */
+  .window-info { display:flex; flex-wrap:wrap; gap:14px; background:#f1f5f9; border:1px solid #cbd5e1; padding:10px 14px; border-radius:8px; font-size:12px; margin-top:18px; }
+  .window-info div span { font-weight:600; }
+
+  /* Momentum bar */
+  .momentum { margin-top:26px; }
+  .momentum-label { font-size:13px; font-weight:600; margin-bottom:6px; }
+  .momentum-bar { display:flex; height:24px; border:1px solid #bbb; border-radius:6px; overflow:hidden; background:#fff; }
+  .mseg { flex:1; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; letter-spacing:.3px; }
+  .m-prefocus { background:var(--prefocus-bg); }
+  .m-focus { background:var(--focus-bg); }
+  .m-distract { background:var(--distract-bg); }
+  .m-idle { background:var(--idle-bg); }
+
+  /* Legend */
+  .legend { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); margin-top:34px; font-size:12px; }
+  .legend-item { display:flex; gap:8px; align-items:flex-start; }
+  .swatch { width:18px; height:14px; border-radius:3px; border:1px solid #999; margin-top:2px; }
+  .sw-prefocus { background:var(--prefocus-bg); border-color:var(--prefocus-border); }
+  .sw-focus { background:var(--focus-bg); border-color:var(--focus-border); }
+  .sw-distract { background:var(--distract-bg); border-color:var(--distract-border); }
+  .sw-idle { background:var(--idle-bg); border-color:var(--idle-border); }
+  .switch-key { width:18px; text-align:center; font-size:14px; line-height:14px; margin-top:2px; }
+
+  .foot { margin-top:30px; font-size:11px; color:#555; max-width:1000px; }
+
+  @media (max-width:1200px) { .bucket { width:150px; } }
+  @media (max-width:980px) { .bucket { width:140px; } }
+  @media (max-width:900px) { .buckets-row { flex-wrap:wrap; } .session-box { display:none; } }
+
+  .distraction-reason { font-size:10px; margin-top:2px; font-weight:600; letter-spacing:.3px; }
+  .reason-dominance { color:#92400e; }
+  .reason-switching { color:#b91c1c; }
+</style>
+</head>
+<body>
+
+  <div class="data-flow" id="dataFlow"></div>
+  <div class="flow-separator"></div>
+
+  <div class="layout" id="layout">
+    <div class="buckets-row" id="buckets"></div>
+    <!-- Session box injected via script -->
+  </div>
+
+  <div class="window-info" id="windowInfo"></div>
+  <div class="momentum" id="momentum"></div>
+  <section class="fsm" id="fsm"></section>
+  <section class="legend" id="legend"></section>
+
+<script>
+// Switching scenario data includes varied dominant apps across window buckets
+// Each bucket may list a dominant app with its percentage; we also keep an apps map for aggregation (simplified)
+const buckets = [
+  { id:'B1', start:'09:00', end:'09:05', dominant:'VSCode 48%', state:'prefocus', note:'Initial productive pattern', switching:'low', apps:{ vscode:48, browser:32, slack:20 } },
+  { id:'B2', start:'09:05', end:'09:10', dominant:'VSCode 55%', state:'prefocus', note:'Streak continues', switching:'low', apps:{ vscode:55, browser:25, slack:20 } },
+  { id:'B3', start:'09:10', end:'09:15', dominant:'Browser 52%', state:'focus', note:'Sustained dominance', switching:'high', apps:{ browser:52, vscode:34, slack:14 } },
+  { id:'B4', start:'09:15', end:'09:20', dominant:'Slack 46%', state:'distract', note:'Dominance drop', switching:'high', apps:{ slack:46, browser:30, vscode:24 } },
+  { id:'B5', start:'09:20', end:'09:25', dominant:'VSCode 58%', state:'focus', note:'Recovery', switching:'low', apps:{ vscode:58, browser:22, slack:20 } },
+  { id:'B6', start:'09:25', end:'09:30', dominant:'Browser 50%', state:'distract', note:'Volatile switching', switching:'high', apps:{ browser:50, vscode:28, slack:22 } },
+  { id:'B7', start:'09:30', end:'09:35', dominant:'<10% act.', state:'idle', note:'Idle period', switching:'low', apps:{ idle:92, vscode:4, browser:3, slack:1 } }
+];
+
+const windowSize = 5; // sliding window size
+const endIndex = 5; // choose B6 as current end to show switching volatility before idle
+const startIndex = Math.max(0, endIndex - windowSize + 1); // covers B2..B6
+const windowBuckets = buckets.slice(startIndex, endIndex + 1);
+
+// Extract dominant app name and percentage from text like "VSCode 48%"
+function parseDominant(dStr){
+  const match = dStr.match(/^([^<]+?)\s(\d+)%/); // ignore <10% cases
+  if(!match) return { app:dStr.replace(/<.*/,'').trim(), pct:0 };
+  return { app:match[1].trim().toLowerCase(), pct:parseFloat(match[2]) };
+}
+
+// Determine unique dominant apps in the window (by parsed dominant app names)
+function uniqueDominantApps(bks){
+  const set = new Set();
+  bks.forEach(b=>{ const p = parseDominant(b.dominant); if(p.app) set.add(p.app); });
+  return set.size;
+}
+
+const uniqueDominantsInWindow = uniqueDominantApps(windowBuckets);
+const uniqueDominantRatio = uniqueDominantsInWindow / windowBuckets.length; // used for switching reason
+
+// Reason thresholds
+const DOMINANCE_THRESHOLD = 50; // < 50% becomes potential distraction reason
+const SWITCHING_UNIQUE_RATIO = 0.75; // example high switching ratio
+
+// Annotate distraction reasons
+buckets.forEach((b, idx) => {
+  if (b.state !== 'distract') return;
+  const dom = parseDominant(b.dominant);
+  const reasons = [];
+  if (dom.pct && dom.pct < DOMINANCE_THRESHOLD) {
+    reasons.push('<span class="reason-dominance">dominant &lt;50%</span>');
+  }
+  if (uniqueDominantRatio >= SWITCHING_UNIQUE_RATIO || b.switching === 'high') {
+    reasons.push('<span class="reason-switching">high switching</span>');
+  }
+  if (reasons.length) {
+    b._distractionReasonHtml = reasons.join(' + ');
+  }
+});
+
+// Aggregate dominant session app (anchor) across window by cumulative percentage (approx sum of given percentages of key apps)
+function computeSessionApp(windowBuckets) {
+  const total = {};
+  windowBuckets.forEach(b => {
+    Object.entries(b.apps).forEach(([app, pct]) => {
+      if(app==='idle') return; total[app] = (total[app] || 0) + pct;
+    });
+  });
+  const entries = Object.entries(total).sort((a,b)=>b[1]-a[1]);
+  if (!entries.length) return { app:'N/A', share:0 };
+  const sum = entries.reduce((s,[,v])=>s+v,0);
+  const [app, val] = entries[0];
+  return { app, share: (val / sum * 100).toFixed(1) };
+}
+
+const sessionApp = computeSessionApp(windowBuckets);
+const stateLabels = { prefocus:'Pre Focus', focus:'Focus', distract:'Distraction', idle:'Idle' };
+
+function renderBuckets() {
+  const row = document.getElementById('buckets');
+  buckets.forEach((b) => {
+    const el = document.createElement('div');
+    el.className = `bucket ${b.state}`;
+    el.innerHTML = `
+      <div class="bucket-header">
+        <span>${b.id} ${b.start}-${b.end}</span>
+        <span class="switch ${b.switching}">${b.switching === 'high' ? '⇅' : '↓'}</span>
+      </div>
+      <div class="bucket-state">${stateLabels[b.state]}</div>
+      <div class="dominant">${b.dominant}</div>
+      <div class="note">${b.note}</div>
+      ${b._distractionReasonHtml ? `<div class="distraction-reason">${b._distractionReasonHtml}</div>` : ''}
+    `;
+    row.appendChild(el);
+  });
+}
+
+function placeSessionBox() {
+  const row = document.getElementById('buckets');
+  const layout = document.getElementById('layout');
+  const bucketEls = Array.from(row.children);
+  const first = bucketEls[startIndex];
+  const last = bucketEls[endIndex];
+  if (!first || !last) return;
+  const fRect = first.getBoundingClientRect();
+  const lRect = last.getBoundingClientRect();
+  const parentRect = layout.getBoundingClientRect();
+  const box = document.createElement('div');
+  box.className = 'session-box';
+  // Compute bounds relative to layout
+  const pad = 8;
+  const x = fRect.left - parentRect.left - pad;
+  const y = fRect.top - parentRect.top - pad;
+  const w = (lRect.right - fRect.left) + pad * 2;
+  const h = Math.max(...bucketEls.slice(startIndex,endIndex+1).map(el=>el.getBoundingClientRect().height)) + pad * 2;
+  box.style.left = x + 'px';
+  box.style.top = y + 'px';
+  box.style.width = w + 'px';
+  box.style.height = h + 'px';
+  const label = document.createElement('div');
+  label.className = 'session-label';
+  label.innerHTML = `Session Window (size=${windowSize}) <span class="session-app-chip">App: ${sessionApp.app} ${sessionApp.share}%</span>`;
+  box.appendChild(label);
+  layout.appendChild(box);
+}
+
+function renderFSM() {
+  const el = document.getElementById('fsm');
+  el.innerHTML = `
+    <h2>State Machine Decisions</h2>
+    <dl>
+      <dt><span class="tag t-prefocus">Pre Focus → Focus</span></dt>
+      <dd>Two consecutive buckets with productive dominance (≥50%, low switching).</dd>
+  <dt><span class="tag t-focus">Focus Retained</span></dt>
+  <dd>Permit up to 2 consecutive distraction buckets without losing Focus if productive dominance returns immediately after.</dd>
+      <dt><span class="tag t-distract">Distraction Trigger</span></dt>
+      <dd>Dominant &lt;50% OR high switching (unique dominant ratio ≥ ${SWITCHING_UNIQUE_RATIO}).</dd>
+      <dt><span class="tag t-prefocus">Recovery</span></dt>
+      <dd>After distraction, need 2 productive buckets again to re-enter Focus.</dd>
+      <dt><span class="tag t-idle">Idle</span></dt>
+      <dd>Active time &lt;10% (insufficient engagement).</dd>
+          <dt><span class="tag t-focus">Session App</span></dt>
+          <dd>Aggregate top app in current window (excl. idle): ${sessionApp.app} (${sessionApp.share}%).</dd>
+    </dl>
+  `;
+}
+
+    function renderDataFlow(){
+      const df = document.getElementById('dataFlow');
+      if(!df) return;
+      df.innerHTML = `
+        <div class="df-node raw">Raw ActivityWatch Data <span>window events</span></div>
+        <div class="df-arrow">→</div>
+        <div class="df-node buckets">Buckets <span>5m aggregation</span></div>
+        <div class="df-arrow">→</div>
+        <div class="df-node statemachine">State Machine <span>classify states</span></div>
+        <div class="df-arrow">→</div>
+        <div class="df-node session">Session Window <span>sliding N buckets</span></div>
+        <div class="df-arrow">→</div>
+        <div class="df-node decision">Decision <span>focus / distract / idle</span></div>
+      `;
+    }
+
+    function renderWindowInfo() {
+      const el = document.getElementById('windowInfo');
+      if(!el) return;
+      const range = `${windowBuckets[0].id} → ${windowBuckets[windowBuckets.length-1].id}`;
+      const span = `${windowBuckets[0].start} - ${windowBuckets[windowBuckets.length-1].end}`;
+      el.innerHTML = `
+        <div><span>Window</span>: ${range}</div>
+        <div><span>Span</span>: ${span}</div>
+        <div><span>Focus</span>: ${windowBuckets.filter(b=>b.state==='focus').length}</div>
+        <div><span>Distract</span>: ${windowBuckets.filter(b=>b.state==='distract').length}</div>
+        <div><span>Session App</span>: ${sessionApp.app} (${sessionApp.share}%)</div>
+        <div><span>High Switching</span>: ${windowBuckets.filter(b=>b.switching==='high').length}/${windowBuckets.length}</div>
+      `;
+    }
+
+function renderLegend() {
+  const legend = document.getElementById('legend');
+  legend.innerHTML = `
+    <div class="legend-item"><span class="swatch sw-prefocus"></span><div><strong>Pre Focus</strong><br/>Building productive dominance.</div></div>
+    <div class="legend-item"><span class="swatch sw-focus"></span><div><strong>Focus</strong><br/>Sustained productive streak.</div></div>
+    <div class="legend-item"><span class="swatch sw-distract"></span><div><strong>Distraction</strong><br/>Dominance lost / switching spike.</div></div>
+    <div class="legend-item"><span class="swatch sw-idle"></span><div><strong>Idle</strong><br/>&lt;10% active time.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--switch-low)">↓</span><div><strong>Low Switching</strong><br/>Stable dominant app.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--switch-high)">⇅</span><div><strong>High Switching</strong><br/>Frequent dominant changes.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--session-border)">▢</span><div><strong>Session Window</strong><br/>Sliding analysis range.</div></div>
+  `;
+}
+
+renderBuckets();
+renderDataFlow();
+renderWindowInfo();
+renderFSM();
+renderLegend();
+// Delay session box placement until layout paints
+requestAnimationFrame(()=> placeSessionBox());
+</script>
+</body>
+</html>
