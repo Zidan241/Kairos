@@ -1,11 +1,6 @@
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-// ES module __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 class Logger {
   constructor() {
@@ -103,22 +98,9 @@ class Logger {
     this.log('error', message, data);
   }
   
-  debug(message, data = null) {
-    if (process.env.NODE_ENV === 'development') {
-      this.log('debug', message, data);
-    }
-  }
-  
-  getLogPath() {
-    return this.logFile;
-  }
-  
-  getLogDirectory() {
-    return this.logDir;
-  }
 }
 
 // Create a singleton instance
 const logger = new Logger();
 
-export { Logger, logger };
+export { logger };

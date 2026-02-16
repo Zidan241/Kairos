@@ -4,68 +4,43 @@ import MetricCard from "@/components/MetricCard";
 import TimelineChart from "@/components/TimelineChart";
 import FocusFlowChart from "@/components/ProductivityGraph";
 import { Clock, Target, Zap, TrendingDown } from "lucide-react";
+import { type DayReportMetrics } from "@shared/metrics";
 
 interface DayReportProps {
-  aggregateData: {
-    focusedHours: number;
-    distractedHours: number;
-    totalHours: number;
-    focusPercentage: number;
-  };
+  data?: DayReportMetrics;
   isLoading: boolean;
-  timelineData?: {
-    segments: Array<{
-      start: number;
-      end: number;
-      status: 'focus' | 'distracted' | 'idle' | 'untracked';
-    }>;
-  };
-  productivityData?: Array<{
-    time: string;
-    timestamp: number;
-    efficiency: number;
-  }>;
-  timeRange?: {
-    start: number;
-    end: number;
-  };
 }
 
-export default function DayReport({ 
-  aggregateData, 
-  isLoading, 
-  timelineData, 
-  productivityData, 
-  timeRange 
-}: DayReportProps) {
-  // Use provided data or fallback to mock data
-  const dailyTimelineData = timelineData || {
-    segments: [
-      { start: 9, end: 10.5, status: 'focus' as const },
-      { start: 10.5, end: 11, status: 'distracted' as const },
-      { start: 11, end: 11.5, status: 'focus' as const },
-      { start: 11.5, end: 12, status: 'idle' as const },
-      { start: 12, end: 13, status: 'untracked' as const },
-      { start: 13, end: 14, status: 'focus' as const },
-      { start: 14, end: 14.5, status: 'distracted' as const },
-      { start: 14.5, end: 16, status: 'focus' as const },
-      { start: 16, end: 16.5, status: 'untracked' as const },
-      { start: 16.5, end: 17, status: 'focus' as const },
-    ]
-  };
+/**
+ * Calculate the percentage change between current and previous values.
+ * Returns null if there's no previous data to compare against.
+ */
+function trendChange(current: number, previous: number | undefined): number | undefined {
+  if (previous === undefined || previous === 0) return undefined;
+  return Math.round(((current - previous) / previous) * 100);
+}
 
-  const dailyProductivityData = productivityData || [
-    { time: '9AM', timestamp: 9, efficiency: 85 },
-    { time: '10AM', timestamp: 10, efficiency: 92 },
-    { time: '11AM', timestamp: 11, efficiency: 78 },
-    { time: '12PM', timestamp: 12, efficiency: 45 },
-    { time: '1PM', timestamp: 13, efficiency: 20 },
-    { time: '2PM', timestamp: 14, efficiency: 88 },
-    { time: '3PM', timestamp: 15, efficiency: 75 },
-    { time: '4PM', timestamp: 16, efficiency: 82 },
-  ];
+export default function DayReport({ data, isLoading }: DayReportProps) {
+  const tb = data?.timeBreakdown;
+  const prev = data?.previousDayBreakdown;
 
-  const dailyTimeRange = timeRange || { start: 9, end: 16 };
+  const focusHours = tb ? Number((tb.focusMinutes / 60).toFixed(1)) : 0;
+  const distractionHours = tb ? Number((tb.distractionMinutes / 60).toFixed(1)) : 0;
+  const efficiency = tb ? Math.round(tb.productivityRatio * 100) : 0;
+
+  const focusChange = trendChange(tb?.focusMinutes ?? 0, prev?.focusMinutes);
+  const distractionChange = trendChange(tb?.distractionMinutes ?? 0, prev?.distractionMinutes);
+  const efficiencyChange = trendChange(
+    tb?.productivityRatio ?? 0,
+    prev?.productivityRatio
+  );
+
+  const pe = data?.planExecution;
+
+  // Build timeline chart data from segments
+  const timelineData = data?.timeline && data.timeline.length > 0
+    ? { segments: data.timeline }
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -79,34 +54,33 @@ export default function DayReport({
           <>
             <MetricCard
               title="Daily Focus Time"
-              value={aggregateData.focusedHours.toString()}
+              value={focusHours.toString()}
               unit="h"
-              change={12}
+              change={focusChange}
               trendPeriod="previous day"
               icon={<Clock className="h-4 w-4 text-muted-foreground" />}
             />
             <MetricCard
               title="Daily Distraction Time"
-              value={aggregateData.distractedHours.toString()}
+              value={distractionHours.toString()}
               unit="h"
-              change={-8}
+              change={distractionChange}
               trendPeriod="previous day"
+              invertTrend
               icon={<TrendingDown className="h-4 w-4 text-muted-foreground" />}
             />
             <MetricCard
               title="Daily Efficiency"
-              value={aggregateData.focusPercentage.toString()}
+              value={efficiency.toString()}
               unit="%"
-              change={5}
+              change={efficiencyChange}
               trendPeriod="previous day"
               icon={<Zap className="h-4 w-4 text-muted-foreground" />}
             />
             <MetricCard
               title="Daily Plan Execution"
-              value="85"
+              value={pe ? pe.completionPercentage.toString() : "0"}
               unit="%"
-              change={7}
-              trendPeriod="previous day"
               icon={<Target className="h-4 w-4 text-muted-foreground" />}
             />
           </>
@@ -114,66 +88,96 @@ export default function DayReport({
       </div>
 
       {/* Plan Execution Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Today's Plan Execution</CardTitle>
-          <CardDescription>Task completion status and estimation accuracy</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Task Completion */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Tasks Completed</span>
-                <span className="text-2xl font-bold">7/9</span>
+      {pe && pe.totalCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Today's Plan Execution</CardTitle>
+            <CardDescription>Task completion status and estimation accuracy</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Task Completion */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Tasks Completed</span>
+                  <span className="text-2xl font-bold">{pe.completedCount}/{pe.totalCount}</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-foreground/60 h-2 rounded-full" style={{ width: `${pe.completionPercentage}%` }}></div>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{pe.totalCount - pe.completedCount} tasks remaining</span>
+                  <span>{pe.completionPercentage}% complete</span>
+                </div>
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-foreground/60 h-2 rounded-full" style={{ width: '78%' }}></div>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>2 tasks remaining</span>
-                <span>78% complete</span>
-              </div>
-            </div>
 
-            {/* Time Estimation Accuracy */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Estimation Accuracy</span>
-                <span className="text-2xl font-bold">92%</span>
+              {/* Time Estimation Accuracy */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Estimation Accuracy</span>
+                  <span className="text-2xl font-bold">{pe.estimationAccuracy}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-foreground/70 h-2 rounded-full" style={{ width: `${pe.estimationAccuracy}%` }}></div>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Estimated: {(pe.estimatedMinutes / 60).toFixed(1)}h</span>
+                  <span>Actual: {(pe.actualMinutes / 60).toFixed(1)}h</span>
+                </div>
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-foreground/70 h-2 rounded-full" style={{ width: '92%' }}></div>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Estimated: 6.5h</span>
-                <span>Actual: 6.0h</span>
-              </div>
-            </div>
 
-            {/* Schedule Adherence */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Schedule Adherence</span>
-                <span className="text-2xl font-bold">85%</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-foreground/80 h-2 rounded-full" style={{ width: '85%' }}></div>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Started on time: 6/7</span>
-                <span>15min avg delay</span>
-              </div>
+              {/* Schedule Adherence placeholder — no data source yet */}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top Apps */}
+      {data?.topApps && data.topApps.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Top Apps</CardTitle>
+            <CardDescription>Most used applications today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.topApps.slice(0, 3).map((app) => (
+                <div key={app.app} className="flex items-center gap-3">
+                  <span className="text-sm font-medium w-32 truncate">{app.app}</span>
+                  <div className="flex-1 bg-muted rounded-full h-2">
+                    <div
+                      className="bg-foreground/50 h-2 rounded-full"
+                      style={{ width: `${app.percentage}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground w-16 text-right">
+                    {app.minutes >= 60
+                      ? `${(app.minutes / 60).toFixed(1)}h`
+                      : `${Math.round(app.minutes)}m`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Today's Activity Timeline */}
-      <TimelineChart data={dailyTimelineData} />
+      {timelineData && <TimelineChart data={timelineData} />}
 
       {/* Focus Flow Chart */}
-      <FocusFlowChart data={dailyProductivityData} timeRange={dailyTimeRange} />
+      {data?.hourlyEfficiency && data.hourlyEfficiency.length > 0 && (
+        <FocusFlowChart data={data.hourlyEfficiency} />
+      )}
+
+      {/* Empty state when no data at all */}
+      {!isLoading && (!tb || tb.totalMinutes === 0) && (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No activity recorded for this day.
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,20 +1,8 @@
-// Metrics types for productivity analytics
-
 import { Subtask, Task } from "./schema";
 
-// Task Metrics
-export interface AppUsage {
-  app: string;
-  minutes: number;
-  percentage: number;
-}
-
-export interface ScheduleBreakdown {
-  date: string;
-  timeBreakdown: TimeBreakdown;
-  apps: AppUsage[];
-}
-
+// ----------------------------
+// Core metric building blocks
+// ----------------------------
 
 export interface TimeBreakdown {
   totalMinutes: number;
@@ -25,8 +13,20 @@ export interface TimeBreakdown {
   productivityRatio: number; // (focus + prefocus) / total
 }
 
-export interface TaskWithMetrics extends Task {
-  subtasks: SubtaskWithMetrics[];
+export interface AppUsage {
+  app: string;
+  minutes: number;
+  percentage: number;
+}
+
+// ----------------------------
+// Task / Subtask metrics (used by Planning views)
+// ----------------------------
+
+export interface ScheduleBreakdown {
+  date: string;
+  timeBreakdown: TimeBreakdown;
+  apps: AppUsage[];
 }
 
 export interface SubtaskMetrics {
@@ -40,16 +40,42 @@ export interface SubtaskWithMetrics extends Subtask {
   isPlannedOnDate?: boolean;
 }
 
+export interface TaskWithMetrics extends Task {
+  subtasks: SubtaskWithMetrics[];
+}
 
-// Reporting Metrics
+// ----------------------------
+// Reporting metrics
+// ----------------------------
+
 export interface DailyMetrics {
   date: string; // YYYY-MM-DD
   timeBreakdown: TimeBreakdown;
 }
 
-// Additional metrics types for future use
-export interface WeeklyMetrics {
-  startDate: string; // YYYY-MM-DD (Monday)
-  endDate: string; // YYYY-MM-DD (Sunday)
-  dailyMetrics: DailyMetrics[];
+export interface PlanExecution {
+  completedCount: number;
+  totalCount: number;
+  completionPercentage: number;
+  estimatedMinutes: number;
+  actualMinutes: number;
+  estimationAccuracy: number;
+}
+
+export interface DayReportMetrics {
+  date: string;
+  timeBreakdown: TimeBreakdown;
+  previousDayBreakdown: TimeBreakdown | null;
+  timeline: Array<{
+    start: number;  // hour as decimal (9.5 = 9:30 AM)
+    end: number;
+    status: 'focus' | 'distracted' | 'idle' | 'untracked';
+  }>;
+  hourlyEfficiency: Array<{
+    time: string;     // "9AM", "10AM"
+    timestamp: number; // hour as integer
+    efficiency: number; // 0-100
+  }>;
+  planExecution: PlanExecution;
+  topApps: AppUsage[];
 }

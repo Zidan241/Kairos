@@ -4,11 +4,18 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ActivitySquare, Clock, Bell, Palette } from "lucide-react";
-import { useState } from "react";
+import { ActivitySquare, Clock, Bell, Palette, Info, Database, RefreshCw, Download, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useElectron, isElectron, useVersions } from "@/hooks/useElectron";
+import { activityApi } from "@/lib/api";
+import { DEFAULT_ACTIVITY_WATCH_URL } from "@shared/constants.js";
 
 export default function Settings() {
+  const electron = useElectron();
+  const versions = useVersions();
+  const isElectronApp = isElectron();
+  
   const [notifications, setNotifications] = useState({
     taskReminders: true,
     focusBreaks: false,
@@ -17,6 +24,41 @@ export default function Settings() {
   });
 
   const [activityWatchConnected, setActivityWatchConnected] = useState(false);
+  const [activityWatchInstalled, setActivityWatchInstalled] = useState<boolean | null>(null);
+  const [manageActivityWatch, setManageActivityWatch] = useState(false);
+  const [activityWatchPath, setActivityWatchPath] = useState('');
+  const [activityWatchUrl, setActivityWatchUrl] = useState(DEFAULT_ACTIVITY_WATCH_URL);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [dbInfo, setDbInfo] = useState<{ path: string; size: number } | null>(null);
+
+  // Load data
+  useEffect(() => {
+    // AW status works in both Electron and web
+    const loadAwStatus = async () => {
+      try {
+        const status = electron
+          ? await electron.getActivityWatchStatus()
+          : await activityApi.getStatus();
+        setActivityWatchInstalled(status.available);
+        setActivityWatchConnected(status.running);
+        setLastChecked(new Date());
+      } catch {}
+    };
+    loadAwStatus();
+
+    // Electron-only data
+    if (!electron) return;
+    electron.getAppVersion().then(setAppVersion).catch(() => {});
+    electron.getDatabaseInfo().then(info => {
+      if (info.exists) setDbInfo({ path: info.path, size: info.size });
+    }).catch(() => {});
+    electron.getSettings().then(settings => {
+      setManageActivityWatch(settings.manageActivityWatch);
+      setActivityWatchPath(settings.activityWatchPath || '');
+      setActivityWatchUrl(settings.activityWatchUrl || DEFAULT_ACTIVITY_WATCH_URL);
+    }).catch(() => {});
+  }, [electron]);
 
   const handleNotificationChange = (key: keyof typeof notifications) => {
     setNotifications(prev => ({
@@ -42,48 +84,190 @@ export default function Settings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Connection Status</Label>
+          {/* Not installed - show install instructions */}
+          {activityWatchInstalled === false && (
+            <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Badge variant={activityWatchConnected ? "default" : "secondary"}>
-                  {activityWatchConnected ? "Connected" : "Disconnected"}
-                </Badge>
-                {!activityWatchConnected && (
-                  <span className="text-sm text-muted-foreground">
-                    Make sure ActivityWatch is running
-                  </span>
-                )}
+                <Badge variant="outline">Not Installed</Badge>
               </div>
+              <p className="text-sm text-muted-foreground">
+                ActivityWatch is required for automatic time tracking and focus detection. 
+                It's a free, open-source app that runs locally on your computer.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="default"
+                  onClick={() => window.open('https://activitywatch.net/downloads/', '_blank')}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ActivityWatch
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open('https://docs.activitywatch.net/en/latest/getting-started.html', '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Setup Guide
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                After installing, restart Kairos or click the button below to detect ActivityWatch.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const status = electron
+                      ? await electron.getActivityWatchStatus()
+                      : await activityApi.getStatus();
+                    setActivityWatchInstalled(status.available);
+                    setActivityWatchConnected(status.running);
+                    setLastChecked(new Date());
+                  } catch {}
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Recheck Installation
+              </Button>
             </div>
-            <Button 
-              variant={activityWatchConnected ? "outline" : "default"}
-              onClick={() => {
-                setActivityWatchConnected(!activityWatchConnected);
-                console.log(activityWatchConnected ? 'Disconnected from ActivityWatch' : 'Connected to ActivityWatch');
-              }}
-              data-testid="button-activitywatch-toggle"
-            >
-              {activityWatchConnected ? "Disconnect" : "Connect"}
-            </Button>
-          </div>
-          {activityWatchConnected && (
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <Label>Server URL</Label>
-                <Input value="http://localhost:5600" readOnly />
+          )}
+
+          {/* Installed - show connection controls */}
+          {activityWatchInstalled !== false && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Connection Status</Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={activityWatchConnected ? "default" : "secondary"}>
+                      {activityWatchConnected ? "Connected" : "Disconnected"}
+                    </Badge>
+                    {!activityWatchConnected && activityWatchInstalled && (
+                      <span className="text-sm text-muted-foreground">
+                        {manageActivityWatch 
+                          ? "Click Connect to start ActivityWatch"
+                          : "Make sure ActivityWatch is running"}
+                      </span>
+                    )}
+                    {activityWatchInstalled === null && (
+                      <span className="text-sm text-muted-foreground">
+                        Checking...
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Button 
+                  variant={activityWatchConnected ? "outline" : "default"}
+                  disabled={activityWatchInstalled === null || !isElectronApp}
+                  onClick={async () => {
+                    if (electron) {
+                      try {
+                        if (activityWatchConnected) {
+                          await electron.stopActivityWatch();
+                        } else {
+                          await electron.startActivityWatch();
+                        }
+                        const status = await electron.getActivityWatchStatus();
+                        setActivityWatchConnected(status.running);
+                        setLastChecked(new Date());
+                      } catch (e) {
+                        console.error('ActivityWatch toggle failed:', e);
+                      }
+                    }
+                  }}
+                  data-testid="button-activitywatch-toggle"
+                >
+                  {activityWatchConnected ? "Disconnect" : "Connect"}
+                </Button>
               </div>
-              <div>
-                <Label>Last Sync</Label>
-                <Input value="2 minutes ago" readOnly />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Server URL</Label>
+                  <Label className="text-muted-foreground font-normal">
+                    Last Checked: {lastChecked ? lastChecked.toLocaleTimeString() : 'Never'}
+                  </Label>
+                </div>
+                <Input
+                  value={activityWatchUrl}
+                  readOnly={!isElectronApp}
+                  onChange={(e) => setActivityWatchUrl(e.target.value)}
+                  onBlur={async () => {
+                    if (electron) {
+                      await electron.setSettings({ activityWatchUrl: activityWatchUrl.trim() });
+                    }
+                  }}
+                  data-testid="input-aw-url"
+                />
               </div>
-            </div>
+
+              {/* Manage AW lifecycle toggle - Electron only */}
+              {isElectronApp && (
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Manage ActivityWatch Lifecycle</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically start ActivityWatch when Kairos opens and stop it when Kairos closes
+                  </p>
+                </div>
+                <Switch
+                  checked={manageActivityWatch}
+                  onCheckedChange={async (checked) => {
+                    setManageActivityWatch(checked);
+                    if (electron) {
+                      await electron.setSettings({ manageActivityWatch: checked });
+                    }
+                  }}
+                  data-testid="switch-manage-aw"
+                />
+              </div>
+              )}
+
+              {/* Custom executable path - Electron only */}
+              {isElectronApp && (
+              <div className="space-y-1.5">
+                <Label htmlFor="aw-path">ActivityWatch Executable Path</Label>
+                <p className="text-sm text-muted-foreground">
+                  Path to the ActivityWatch executable. Change if installed in a non-standard location.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    id="aw-path"
+                    placeholder="Path to aw-qt executable"
+                    value={activityWatchPath}
+                    onChange={(e) => setActivityWatchPath(e.target.value)}
+                    onBlur={async () => {
+                      if (electron) {
+                        await electron.setSettings({ activityWatchPath: activityWatchPath.trim() });
+                      }
+                    }}
+                    data-testid="input-aw-path"
+                  />
+                  {activityWatchPath && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        setActivityWatchPath('');
+                        if (electron) {
+                          await electron.setSettings({ activityWatchPath: '' });
+                        }
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Focus Settings */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -133,10 +317,10 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground mt-1">Hours per day</p>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Notification Settings */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Bell className="h-5 w-5" />
@@ -202,7 +386,7 @@ export default function Settings() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Appearance */}
       <Card>
@@ -227,6 +411,66 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* App Info - shown when running in Electron */}
+      {isElectronApp && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              <CardTitle>App Info</CardTitle>
+            </div>
+            <CardDescription>
+              Application version and system information
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <Label>Version</Label>
+                <p className="text-muted-foreground">{appVersion || 'Loading...'}</p>
+              </div>
+              {versions && (
+                <div>
+                  <Label>Electron</Label>
+                  <p className="text-muted-foreground">{versions.electron}</p>
+                </div>
+              )}
+            </div>
+            
+            {dbInfo && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  <Label>Database</Label>
+                </div>
+                <p className="text-sm text-muted-foreground truncate" title={dbInfo.path}>
+                  {dbInfo.path}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Size: {(dbInfo.size / 1024).toFixed(1)} KB
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={async () => {
+                    if (electron) {
+                      try {
+                        const backupPath = await electron.backupDatabase();
+                        console.log('Backup created:', backupPath);
+                      } catch (e) {
+                        console.error('Backup failed:', e);
+                      }
+                    }
+                  }}
+                >
+                  Backup Database
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

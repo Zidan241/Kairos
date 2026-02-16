@@ -3,6 +3,7 @@ import { Router } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "../services/storage";
 import { metricsService } from "../services/metrics";
+import { activityWatchService } from "../services/activity/nodeActivityWatch";
 import { 
   insertTaskSchema, insertSubtaskSchema
 } from "@shared/schema";
@@ -134,6 +135,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const metrics = await metricsService.getDailyMetrics(targetDate);
       res.json(metrics);
     }
+  }));
+
+  apiRouter.get("/metrics/day-report", asyncHandler(async (req: any, res: any) => {
+    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const report = await metricsService.getDayReportMetrics(date);
+    res.json(report);
+  }));
+
+  apiRouter.get("/activity/status", asyncHandler(async (req: any, res: any) => {
+    const running = await activityWatchService.isActivityWatchRunning();
+    res.json({ available: running, running });
   }));
 
   apiRouter.get("/activity/task-transition", asyncHandler(async (req: any, res: any) => {

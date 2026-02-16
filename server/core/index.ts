@@ -3,6 +3,7 @@ import { registerRoutes } from "../api/routes";
 import { serveStatic, log } from "../dev/vite";
 import { setupLoggingMiddleware, setupErrorHandler } from "./middleware";
 import "../services/activity/nodeActivityWatch"; // Start ActivityWatch service
+import { DEFAULT_SERVER_PORT } from "../../shared/constants.js";
 
 const app = express();
 app.use(express.json());
@@ -33,10 +34,8 @@ app.use(setupLoggingMiddleware());
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5001', 10);
+  const port = parseInt(process.env.PORT || String(DEFAULT_SERVER_PORT), 10);
   server.listen({
     port,
     host: "0.0.0.0",

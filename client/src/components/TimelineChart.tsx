@@ -17,8 +17,15 @@ interface TimelineChartProps {
 }
 
 export default function TimelineChart({ data }: TimelineChartProps) {
-  const dayStart = 9; // 9AM
-  const dayEnd = 17;  // 5PM
+  // Derive range from actual data instead of hardcoding 9–5
+  const dataStart = data?.segments?.length
+    ? Math.floor(Math.min(...data.segments.map(s => s.start)))
+    : 9;
+  const dataEnd = data?.segments?.length
+    ? Math.ceil(Math.max(...data.segments.map(s => s.end)))
+    : 17;
+  const dayStart = dataStart;
+  const dayEnd = Math.max(dataEnd, dayStart + 1); // at least 1 hour range
   const totalHours = dayEnd - dayStart;
 
   // Safety check for data
@@ -42,11 +49,15 @@ export default function TimelineChart({ data }: TimelineChartProps) {
     switch (status) {
       case 'focus': return 'bg-green-400/75';
       case 'distracted': return 'bg-red-400/75';
-      case 'idle': return 'bg-gray-500/65';
-      case 'untracked': return 'bg-gray-400/5';
+      case 'idle': return 'bg-slate-400/50';
+      case 'untracked': return '';
       default: return 'bg-muted';
     }
   };
+
+  const getUntrackedStyle = (): React.CSSProperties => ({
+    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(150,150,150,0.15) 3px, rgba(150,150,150,0.15) 6px)',
+  });
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -99,11 +110,11 @@ export default function TimelineChart({ data }: TimelineChartProps) {
               <span>Distracted</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-gray-500/65"></div>
+              <div className="w-4 h-4 rounded bg-slate-400/50"></div>
               <span>Idle</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-gray-300/5  border border-gray-400/80 border-dashed"></div>
+              <div className="w-4 h-4 rounded border border-muted-foreground/20" style={getUntrackedStyle()}></div>
               <span>Untracked</span>
             </div>
           </div>
@@ -132,7 +143,8 @@ export default function TimelineChart({ data }: TimelineChartProps) {
                     className={`absolute h-full ${getStatusColor(segment.status)} border-r border-background`}
                     style={{
                       left: `${leftPercent}%`,
-                      width: `${widthPercent}%`
+                      width: `${widthPercent}%`,
+                      ...(segment.status === 'untracked' ? getUntrackedStyle() : {}),
                     }}
                     data-testid={`segment-${index}`}
                     title={`${formatTime(segment.start)} - ${formatTime(segment.end)}: ${getStatusLabel(segment.status)}${segment.task ? ` • ${segment.task}` : ''}`}

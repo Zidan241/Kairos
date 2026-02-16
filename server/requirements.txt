@@ -1,5 +1,0 @@
-# ActivityWatch Python dependencies for Kairo Advanced Analytics
-# Supports bucket-based analysis, behavioral patterns, and configurable presets
-aw-client>=0.5.0
-aw-core>=0.5.0
-pytz  # For timezone handling

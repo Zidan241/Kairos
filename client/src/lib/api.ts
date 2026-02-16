@@ -4,7 +4,7 @@ import {
   UpdateTask
 } from '@shared/schema';
 import { 
-  type DailyMetrics, type TaskWithMetrics
+  type DailyMetrics, type DayReportMetrics, type TaskWithMetrics
 } from '@shared/metrics';
 
 // -------------------------
@@ -79,6 +79,20 @@ export const metricsApi = {
   getDailyMetrics: async (date?: string): Promise<DailyMetrics> => {
     const queryParam = date ? `?date=${date}` : '';
     const res = await apiRequest('GET', `/api/metrics/daily${queryParam}`);
+    return res.json();
+  },
+  getDayReport: async (date: string): Promise<DayReportMetrics> => {
+    const res = await apiRequest('GET', `/api/metrics/day-report?date=${date}`);
+    return res.json();
+  },
+};
+
+// -------------------------
+// ActivityWatch API
+// -------------------------
+export const activityApi = {
+  getStatus: async (): Promise<{ available: boolean; running: boolean }> => {
+    const res = await apiRequest('GET', '/api/activity/status');
     return res.json();
   },
 };

@@ -1,20 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { DEFAULT_SERVER_PORT } from "./shared/constants.js";
 
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {
@@ -34,18 +25,10 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     proxy: {
-      // Proxy API calls to the embedded server
-      // Try common ports where the embedded server might be running
       '/api': {
-        target: 'http://localhost:5001',
+        target: `http://localhost:${process.env.PORT || DEFAULT_SERVER_PORT}`,
         changeOrigin: true,
         secure: false,
-        configure: (proxy) => {
-          // If 3001 fails, try 3002, 3003, etc.
-          proxy.on('error', () => {
-            console.log('API proxy failed, embedded server might be on a different port');
-          });
-        },
       },
     },
   },

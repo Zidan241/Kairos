@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { tasksApi, subtasksApi } from "@/lib/api";
 import { type InsertTask, type Subtask, type InsertSubtask, type UpdateSubtask, UpdateTask } from "@shared/schema";
-import { ACTIVITY_CONFIG } from "@shared/constants";
+import { ACTIVITY_CONFIG } from "@shared/constants.js";
 import { TaskWithMetrics } from "@shared/metrics";
 import { dateUtils } from "@shared/utils";
 

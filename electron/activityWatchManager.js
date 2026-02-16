@@ -2,9 +2,12 @@ import { dialog } from 'electron';
 import { spawn } from 'child_process';
 import http from 'http';
 import path from 'path';
-import { promises as fs } from 'fs';
+import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import os from 'os';
 import { logger } from './logger.js';
+import { settingsManager } from './settingsManager.js';
+import { DEFAULT_ACTIVITY_WATCH_URL } from '../shared/constants.js';
 
 class ActivityWatchManager {
   constructor() {
@@ -12,7 +15,7 @@ class ActivityWatchManager {
     this.isRunning = false;
     this.lastHealthCheck = null;
     this.healthCheckInterval = null;
-    this.apiUrl = 'http://localhost:5600'; // Default ActivityWatch API URL
+    this.apiUrl = settingsManager.get('activityWatchUrl') || DEFAULT_ACTIVITY_WATCH_URL;
     this.statusCheckInterval = 30000; // Check every 30 seconds
     this.executablePath = null;
     this.activityWatchProcess = null;
@@ -39,18 +42,33 @@ class ActivityWatchManager {
   }
   
   async findExecutable() {
-    console.log('Looking for ActivityWatch executable...');
+    logger.info('Looking for ActivityWatch executable...');
     
     try {
+      // Check user-configured path first
+      const customPath = settingsManager.get('activityWatchPath');
+      if (customPath) {
+        try {
+          await fsPromises.access(customPath, fs.constants.F_OK);
+          logger.info(`Using user-configured ActivityWatch path: ${customPath}`);
+          this.executablePath = customPath;
+          return { found: true, path: customPath };
+        } catch {
+          logger.warn(`User-configured ActivityWatch path not found: ${customPath}`);
+        }
+      }
+
+      // Fall back to platform-specific auto-detection
       const platform = process.platform;
-      const possiblePaths = this.platformPaths[platform] || this.platformPaths.linux;
+      const possiblePaths = this.platformPaths[platform] || [];
       
       for (const awPath of possiblePaths) {
         try {
-          // Check if file exists and is executable
-          await fs.access(awPath, fs.constants.F_OK);
-          console.log(`Found ActivityWatch executable at: ${awPath}`);
+          // Check if file exists
+          await fsPromises.access(awPath, fs.constants.F_OK);
+          logger.info(`Found ActivityWatch executable at: ${awPath}`);
           this.executablePath = awPath;
+          settingsManager.set({ activityWatchPath: awPath });
           return { found: true, path: awPath };
         } catch (error) {
           // File doesn't exist, continue checking
@@ -63,17 +81,18 @@ class ActivityWatchManager {
         const pathResult = await this.checkPathForExecutable();
         if (pathResult.found) {
           this.executablePath = pathResult.path;
+          settingsManager.set({ activityWatchPath: pathResult.path });
           return pathResult;
         }
       } catch (error) {
-        console.log('aw-qt not found in PATH');
+        logger.info('aw-qt not found in PATH');
       }
       
-      console.log('ActivityWatch executable not found');
+      logger.info('ActivityWatch executable not found');
       return { found: false, path: null };
       
     } catch (error) {
-      console.error('Error finding ActivityWatch executable:', error);
+      logger.error('Error finding ActivityWatch executable:', error);
       return { found: false, path: null, error: error.message };
     }
   }
@@ -91,7 +110,7 @@ class ActivityWatchManager {
       child.on('close', (code) => {
         if (code === 0 && output.trim()) {
           const awPath = output.trim().split('\n')[0]; // Take first result
-          console.log(`Found aw-qt in PATH: ${awPath}`);
+          logger.info(`Found aw-qt in PATH: ${awPath}`);
           resolve({ found: true, path: awPath });
         } else {
           resolve({ found: false, path: null });
@@ -110,13 +129,17 @@ class ActivityWatchManager {
     try {
       // First check if it's already running via API
       const healthStatus = await this.checkHealth();
-      this.isAvailable = healthStatus.available;
       this.isRunning = healthStatus.running;
       this.lastHealthCheck = new Date();
       
-      if (healthStatus.available) {
+      if (healthStatus.running) {
+        this.isAvailable = true;
         logger.info('ActivityWatch detected and running');
         this.startHealthMonitoring();
+        // Still find the executable path so settings has it
+        if (!this.executablePath) {
+          await this.findExecutable();
+        }
       } else {
         logger.info('ActivityWatch not running, checking for executable...');
         // If not running, check if we can find the executable
@@ -124,16 +147,14 @@ class ActivityWatchManager {
         this.isAvailable = execResult.found;
         
         if (execResult.found) {
-            logger.info('ActivityWatch executable found, attempting to start...');
-            // Try to start ActivityWatch automatically
-            await this.startActivityWatch();
+            logger.info('ActivityWatch executable found but not running');
         } else {
             logger.warn('ActivityWatch executable not found on system');
         }
       }
       
       return {
-        available: this.isAvailable,
+        installed: this.isAvailable,
         running: this.isRunning,
         executablePath: this.executablePath,
         apiUrl: this.apiUrl
@@ -144,7 +165,7 @@ class ActivityWatchManager {
       this.isAvailable = false;
       this.isRunning = false;
       return { 
-        available: false, 
+        installed: false, 
         running: false, 
         error: error.message 
       };
@@ -210,7 +231,7 @@ class ActivityWatchManager {
   }
   
   async startActivityWatch() {
-    console.log('Starting ActivityWatch...');
+    logger.info('Starting ActivityWatch...');
     
     try {
       // First check if it's already running
@@ -234,7 +255,7 @@ class ActivityWatchManager {
         }
       }
       
-      console.log(`Starting ActivityWatch from: ${this.executablePath}`);
+      logger.info(`Starting ActivityWatch from: ${this.executablePath}`);
       
       // Start ActivityWatch using aw-qt (tray icon manager)
       this.activityWatchProcess = spawn(this.executablePath, [], {
@@ -244,24 +265,24 @@ class ActivityWatchManager {
       
       // Add error handling for the process
       this.activityWatchProcess.on('error', (error) => {
-        console.error('ActivityWatch process error:', error);
+        logger.error('ActivityWatch process error:', error);
       });
       
       this.activityWatchProcess.stderr.on('data', (data) => {
-        console.error('ActivityWatch stderr:', data.toString());
+        logger.error('ActivityWatch stderr:', data.toString());
       });
       
       this.activityWatchProcess.on('exit', (code, signal) => {
-        console.log(`ActivityWatch process exited with code ${code}, signal ${signal}`);
+        logger.info(`ActivityWatch process exited with code ${code}, signal ${signal}`);
       });
       
       // Unref so the child process doesn't keep the parent alive
       this.activityWatchProcess.unref();
       
-      console.log(`ActivityWatch process started with PID: ${this.activityWatchProcess.pid}`);
+      logger.info(`ActivityWatch process started with PID: ${this.activityWatchProcess.pid}`);
       
       // Wait a moment for ActivityWatch to start
-      console.log('Waiting for ActivityWatch to start...');
+      logger.info('Waiting for ActivityWatch to start...');
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       // Check if it started successfully
@@ -271,7 +292,7 @@ class ActivityWatchManager {
         this.isRunning = true;
         this.startHealthMonitoring();
         
-        console.log('ActivityWatch started successfully');
+        logger.info('ActivityWatch started successfully');
         return { 
           status: 'started', 
           message: 'ActivityWatch started successfully',
@@ -282,8 +303,12 @@ class ActivityWatchManager {
       }
       
     } catch (error) {
-      console.error('Failed to start ActivityWatch:', error);
+      logger.error('Failed to start ActivityWatch:', error);
       this.activityWatchProcess = null;
+      return {
+        status: 'error',
+        message: error.message || 'Failed to start ActivityWatch'
+      };
     }
   }
   
@@ -305,21 +330,41 @@ class ActivityWatchManager {
         
         // Log status changes
         if (wasRunning && !health.running) {
-          console.log('ActivityWatch stopped running');
+          logger.info('ActivityWatch stopped running');
         } else if (!wasRunning && health.running) {
-          console.log('ActivityWatch started running');
+          logger.info('ActivityWatch started running');
         }
         
       } catch (error) {
-        console.error('Health check failed:', error);
+        logger.error('Health check failed:', error);
         this.isRunning = false;
         this.isAvailable = false;
       }
     }, this.statusCheckInterval);
   }
   
+  /**
+   * Disconnect Kairos from ActivityWatch — stop monitoring but don't kill AW.
+   * The UI "Disconnect" button calls this.
+   */
+  disconnect() {
+    logger.info('Disconnecting from ActivityWatch...');
+    this.stopHealthMonitoring();
+    this.isRunning = false;
+    return { status: 'disconnected', message: 'Disconnected from ActivityWatch' };
+  }
+
+  /**
+   * Reconnect to ActivityWatch — re-detect and start monitoring.
+   * The UI "Connect" button calls this.
+   */
+  async connect() {
+    logger.info('Connecting to ActivityWatch...');
+    return await this.detectActivityWatch();
+  }
+
   async stopActivityWatch() {
-    console.log('Stopping ActivityWatch...');
+    logger.info('Stopping ActivityWatch...');
     
     // Stop health monitoring
     this.stopHealthMonitoring();
@@ -341,22 +386,26 @@ class ActivityWatchManager {
             message: 'ActivityWatch stopped successfully' 
           };
         } else {
+          // Process didn't respond to SIGTERM — disconnect anyway
+          this.isRunning = false;
           return { 
             status: 'still_running', 
             message: 'ActivityWatch may still be running from system tray. Check your system tray icon.' 
           };
         }
       } catch (error) {
-        console.error('Error stopping ActivityWatch:', error);
+        logger.error('Error stopping ActivityWatch:', error);
         return { 
           status: 'error', 
           message: 'Failed to stop ActivityWatch. Please stop it manually from system tray.' 
         };
       }
     } else {
+      // AW wasn't started by us — can't kill it, just disconnect
+      this.isRunning = false;
       return { 
-        status: 'external_management', 
-        message: 'ActivityWatch was not started by Kairos. Please stop it from your system tray or task manager.' 
+        status: 'disconnected', 
+        message: 'ActivityWatch was not started by Kairos. Disconnected from monitoring. Stop it manually from your system tray if needed.' 
       };
     }
   }
@@ -382,10 +431,16 @@ class ActivityWatchManager {
   }
   
   async restartActivityWatch() {
-    console.log('Cannot restart ActivityWatch - it is managed externally');
+    logger.info('Restarting ActivityWatch...');
     
-    // Since we don't manage the process, we can only refresh our connection
-    return await this.detectActivityWatch();
+    // Stop first if we have a managed process
+    if (this.activityWatchProcess) {
+      await this.stopActivityWatch();
+      // Brief pause before restarting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    return await this.startActivityWatch();
   }
   
   // Show user-friendly dialog about ActivityWatch status

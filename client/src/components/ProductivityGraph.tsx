@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceLine, Area, AreaChart } from "recharts";
+import {  Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceLine, Area, AreaChart } from "recharts";
 
 interface ProductivityPoint {
   time: string;
@@ -9,10 +9,9 @@ interface ProductivityPoint {
 
 interface ProductivityGraphProps {
   data: ProductivityPoint[];
-  timeRange: { start: number; end: number }; // start and end hours
 }
 
-export default function FocusFlowChart({ data, timeRange }: ProductivityGraphProps) {
+export default function FocusFlowChart({ data }: ProductivityGraphProps) {
   if (!data || !Array.isArray(data) || data.length === 0) {
     return (
       <Card>

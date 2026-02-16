@@ -1,24 +1,16 @@
-import { BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, screen, session, shell } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { logger } from './logger.js';
+import { DEV_VITE_URL } from '../shared/constants.js';
 
-// ES module __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = import.meta.dirname;
+
+const STATE_FILE = 'window-state.json';
 
 class WindowManager {
   constructor() {
     this.mainWindow = null;
-    this.windowState = {
-      width: 1200,
-      height: 800,
-      x: undefined,
-      y: undefined,
-      isMaximized: false,
-      isMinimized: false
-    };
-    
-    this.setupIpcHandlers();
   }
   
   createWindow() {
@@ -26,26 +18,27 @@ class WindowManager {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
     
+    const savedState = this.loadWindowState();
+    
     // Calculate centered position if not saved
-    if (this.windowState.x === undefined) {
-      this.windowState.x = Math.round((screenWidth - this.windowState.width) / 2);
+    if (savedState.x === undefined) {
+      savedState.x = Math.round((screenWidth - savedState.width) / 2);
     }
-    if (this.windowState.y === undefined) {
-      this.windowState.y = Math.round((screenHeight - this.windowState.height) / 2);
+    if (savedState.y === undefined) {
+      savedState.y = Math.round((screenHeight - savedState.height) / 2);
     }
     
     this.mainWindow = new BrowserWindow({
-      width: this.windowState.width,
-      height: this.windowState.height,
-      x: this.windowState.x,
-      y: this.windowState.y,
+      width: savedState.width,
+      height: savedState.height,
+      x: savedState.x,
+      y: savedState.y,
       minWidth: 800,
       minHeight: 600,
       show: false, // Don't show until ready-to-show
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        enableRemoteModule: false,
         preload: path.join(__dirname, 'preload.js'),
         // Security settings
         webSecurity: true,
@@ -59,13 +52,16 @@ class WindowManager {
       transparent: false,
       backgroundColor: '#ffffff',
       // Icon
-      icon: path.join(__dirname, '../assets/icon.png') // TODO: Add app icon
+      icon: path.join(__dirname, '../assets/icon.png')
     });
     
     // Restore maximized state
-    if (this.windowState.isMaximized) {
+    if (savedState.isMaximized) {
       this.mainWindow.maximize();
     }
+    
+    // Setup CSP headers for security
+    this.setupContentSecurityPolicy();
     
     // Setup window event handlers
     this.setupWindowEventHandlers();
@@ -75,39 +71,6 @@ class WindowManager {
   
   setupWindowEventHandlers() {
     if (!this.mainWindow) return;
-    
-    // Save window state on resize/move
-    this.mainWindow.on('resize', () => {
-      if (!this.mainWindow.isMaximized()) {
-        const bounds = this.mainWindow.getBounds();
-        this.windowState.width = bounds.width;
-        this.windowState.height = bounds.height;
-      }
-    });
-    
-    this.mainWindow.on('move', () => {
-      if (!this.mainWindow.isMaximized()) {
-        const bounds = this.mainWindow.getBounds();
-        this.windowState.x = bounds.x;
-        this.windowState.y = bounds.y;
-      }
-    });
-    
-    this.mainWindow.on('maximize', () => {
-      this.windowState.isMaximized = true;
-    });
-    
-    this.mainWindow.on('unmaximize', () => {
-      this.windowState.isMaximized = false;
-    });
-    
-    this.mainWindow.on('minimize', () => {
-      this.windowState.isMinimized = true;
-    });
-    
-    this.mainWindow.on('restore', () => {
-      this.windowState.isMinimized = false;
-    });
     
     // Show window when ready
     this.mainWindow.once('ready-to-show', () => {
@@ -136,44 +99,33 @@ class WindowManager {
     this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       // Open external links in default browser
       if (url.startsWith('http://') || url.startsWith('https://')) {
-        import('electron').then(({ shell }) => shell.openExternal(url));
+        shell.openExternal(url);
       }
       return { action: 'deny' };
     });
   }
   
-  setupIpcHandlers() {
-    // Window control handlers
-    ipcMain.handle('window-minimize', () => {
-      if (this.mainWindow) {
-        this.mainWindow.minimize();
-      }
-    });
-    
-    ipcMain.handle('window-maximize', () => {
-      if (this.mainWindow) {
-        if (this.mainWindow.isMaximized()) {
-          this.mainWindow.unmaximize();
-        } else {
-          this.mainWindow.maximize();
+  setupContentSecurityPolicy() {
+    const isDev = process.env.NODE_ENV === 'development';
+
+    // Apply CSP headers to all responses
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const csp = [
+        "default-src 'self'",
+        // unsafe-inline required only for Vite HMR in dev; omit in production
+        isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data: blob:",
+        "connect-src 'self' http://localhost:* ws://localhost:*", // API and HMR websocket
+      ].join('; ');
+      
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [csp]
         }
-      }
-    });
-    
-    ipcMain.handle('window-close', () => {
-      if (this.mainWindow) {
-        this.mainWindow.close();
-      }
-    });
-    
-    // Window state handlers
-    ipcMain.handle('window-get-state', () => {
-      return {
-        ...this.windowState,
-        isMaximized: this.mainWindow?.isMaximized() || false,
-        isMinimized: this.mainWindow?.isMinimized() || false,
-        isFocused: this.mainWindow?.isFocused() || false
-      };
+      });
     });
   }
   
@@ -181,21 +133,26 @@ class WindowManager {
     if (!this.mainWindow) return;
     
     if (isDevelopment) {
-      // Development: load from Vite dev server
-      // Wait a moment for Vite dev server to be ready
-      setTimeout(() => {
-        this.mainWindow.loadURL('http://localhost:5173').catch(err => {
-          console.error('Failed to load Vite dev server:', err);
-          // Fallback: try to load a simple HTML page
-          this.loadFallbackContent();
+      // Development: load from Vite dev server with retry
+      const viteUrl = DEV_VITE_URL;
+      const loadWithRetry = (attemptsLeft = 10) => {
+        this.mainWindow.loadURL(viteUrl).catch(err => {
+          if (attemptsLeft > 0) {
+            logger.info(`Waiting for Vite dev server... (${attemptsLeft} retries left)`);
+            setTimeout(() => loadWithRetry(attemptsLeft - 1), 1000);
+          } else {
+            logger.error('Failed to connect to Vite dev server:', err);
+            this.loadFallbackContent();
+          }
         });
-        // Open DevTools in development
-        this.mainWindow.webContents.openDevTools();
-      }, 2000);
+      };
+      loadWithRetry();
+      // Open DevTools in development
+      this.mainWindow.webContents.openDevTools();
     } else {
       // Production: load built files
       this.mainWindow.loadFile(path.join(__dirname, '../client/dist/index.html')).catch(err => {
-        console.error('Failed to load built files:', err);
+        logger.error('Failed to load built files:', err);
         this.loadFallbackContent();
       });
     }
@@ -220,9 +177,9 @@ class WindowManager {
       <body>
         <div class="container">
           <h1>Kairos Desktop</h1>
-          <div class="info">Server is running on port 3000</div>
+          <div class="info">Server could not be reached</div>
           <div class="error">Frontend not available</div>
-          <p>Please check that the Vite development server is running on port 5173</p>
+          <p>Please check that the Vite development server is running</p>
           <button onclick="location.reload()">Retry</button>
         </div>
       </body>
@@ -232,35 +189,52 @@ class WindowManager {
     this.mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fallbackHtml)}`);
   }
   
-  getWindow() {
-    return this.mainWindow;
-  }
-  
   isWindowCreated() {
     return this.mainWindow !== null;
   }
   
-  focus() {
-    if (this.mainWindow) {
-      if (this.mainWindow.isMinimized()) {
-        this.mainWindow.restore();
-      }
-      this.mainWindow.focus();
+  // Save window state to disk
+  saveWindowState() {
+    if (!this.mainWindow) return;
+    
+    try {
+      const bounds = this.mainWindow.getNormalBounds();
+      const state = {
+        width: bounds.width,
+        height: bounds.height,
+        x: bounds.x,
+        y: bounds.y,
+        isMaximized: this.mainWindow.isMaximized(),
+      };
+      const statePath = path.join(app.getPath('userData'), STATE_FILE);
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf8');
+      logger.info('Window state saved');
+    } catch (error) {
+      logger.error('Failed to save window state:', error);
     }
   }
   
-  // Save window state (called before app quit)
-  saveWindowState() {
-    // TODO: Implement persistent storage of window state
-    // This could save to a config file or electron-store
-    console.log('Saving window state:', this.windowState);
-  }
-  
-  // Load window state (called during initialization)
+  // Load window state from disk (or return defaults)
   loadWindowState() {
-    // TODO: Implement loading of saved window state
-    // This could load from a config file or electron-store
-    console.log('Loading window state...');
+    const defaults = {
+      width: 1200,
+      height: 800,
+      x: undefined,
+      y: undefined,
+      isMaximized: false
+    };
+    
+    try {
+      const statePath = path.join(app.getPath('userData'), STATE_FILE);
+      if (fs.existsSync(statePath)) {
+        const saved = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        return { ...defaults, ...saved };
+      }
+    } catch (error) {
+      logger.error('Failed to load window state:', error);
+    }
+    
+    return defaults;
   }
 }
 

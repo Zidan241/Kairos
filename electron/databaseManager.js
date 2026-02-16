@@ -1,51 +1,29 @@
-import { app, dialog } from 'electron';
+import { app } from 'electron';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { fileURLToPath } from 'url';
+import { logger } from './logger.js';
 
-// ES module __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 class DatabaseManager {
   constructor() {
-    this.sourceDatabasePath = path.join(__dirname, '../kairo.db');
     this.userDatabasePath = path.join(app.getPath('userData'), 'kairo.db');
     this.isInitialized = false;
   }
   
   async initializeDatabase() {
     try {
-      console.log('Initializing database...');
+      logger.info('Initializing database...');
       
       // Ensure user data directory exists
       const userDataDir = app.getPath('userData');
       await this.ensureDirectoryExists(userDataDir);
       
-      // Check if user database already exists
       const userDbExists = await this.fileExists(this.userDatabasePath);
+      logger.info(userDbExists ? 'User database found' : 'New database will be created by server');
       
-      if (!userDbExists) {
-        console.log('User database not found, checking for bundled database...');
-        
-        // Check if source database exists in app bundle
-        const sourceDbExists = await this.fileExists(this.sourceDatabasePath);
-        
-        if (sourceDbExists) {
-          console.log('Copying bundled database to user directory...');
-          await this.copyDatabase();
-        } else {
-          console.log('No bundled database found, will create new database...');
-          // Database will be created by the server when it starts
-          // This is normal for first-time installation
-        }
-      } else {
-        console.log('User database found, checking if update needed...');
-        await this.checkForDatabaseUpdates();
-      }
-      
+      // Migrations are handled by Drizzle ORM when the server starts
       this.isInitialized = true;
-      console.log(`Database initialized at: ${this.userDatabasePath}`);
+      logger.info(`Database path: ${this.userDatabasePath}`);
       
       return {
         path: this.userDatabasePath,
@@ -54,46 +32,8 @@ class DatabaseManager {
       };
       
     } catch (error) {
-      console.error('Database initialization failed:', error);
+      logger.error('Database initialization failed:', error);
       throw error;
-    }
-  }
-  
-  async copyDatabase() {
-    try {
-      console.log(`Copying database from ${this.sourceDatabasePath} to ${this.userDatabasePath}`);
-      
-      // Read source database
-      const sourceData = await fs.readFile(this.sourceDatabasePath);
-      
-      // Write to user directory
-      await fs.writeFile(this.userDatabasePath, sourceData);
-      
-      console.log('Database copied successfully');
-      
-    } catch (error) {
-      console.error('Failed to copy database:', error);
-      throw new Error(`Database copy failed: ${error.message}`);
-    }
-  }
-  
-  async checkForDatabaseUpdates() {
-    try {
-      // Check if bundled database is newer than user database
-      const sourceStats = await fs.stat(this.sourceDatabasePath).catch(() => null);
-      const userStats = await fs.stat(this.userDatabasePath);
-      
-      if (sourceStats && sourceStats.mtime > userStats.mtime) {
-        console.log('Bundled database is newer, considering update...');
-        
-        // For now, we don't automatically update user databases
-        // This could be enhanced to handle schema migrations
-        console.log('Database update skipped (preserving user data)');
-      }
-      
-    } catch (error) {
-      console.warn('Could not check for database updates:', error.message);
-      // Non-critical error, continue with existing database
     }
   }
   
@@ -110,14 +50,13 @@ class DatabaseManager {
       await this.ensureDirectoryExists(path.dirname(backupPath));
       
       // Copy current database to backup location
-      const databaseData = await fs.readFile(this.userDatabasePath);
-      await fs.writeFile(backupPath, databaseData);
+      await fs.copyFile(this.userDatabasePath, backupPath);
       
-      console.log(`Database backed up to: ${backupPath}`);
+      logger.info(`Database backed up to: ${backupPath}`);
       return backupPath;
       
     } catch (error) {
-      console.error('Database backup failed:', error);
+      logger.error('Database backup failed:', error);
       throw error;
     }
   }
@@ -145,14 +84,6 @@ class DatabaseManager {
     return this.userDatabasePath;
   }
   
-  getSourceDatabasePath() {
-    return this.sourceDatabasePath;
-  }
-  
-  isReady() {
-    return this.isInitialized;
-  }
-  
   async getDatabaseInfo() {
     try {
       const exists = await this.fileExists(this.userDatabasePath);
@@ -174,7 +105,7 @@ class DatabaseManager {
       };
       
     } catch (error) {
-      console.error('Failed to get database info:', error);
+      logger.error('Failed to get database info:', error);
       return {
         path: this.userDatabasePath,
         exists: false,
@@ -218,11 +149,11 @@ class DatabaseManager {
       const filesToDelete = filesWithStats.slice(maxBackups);
       for (const file of filesToDelete) {
         await fs.unlink(file.path);
-        console.log(`Deleted old backup: ${file.name}`);
+        logger.info(`Deleted old backup: ${file.name}`);
       }
       
     } catch (error) {
-      console.warn('Failed to cleanup old backups:', error.message);
+      logger.warn('Failed to cleanup old backups:', error.message);
       // Non-critical error, don't throw
     }
   }

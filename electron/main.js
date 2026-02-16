@@ -1,32 +1,29 @@
 import { app, dialog, ipcMain } from 'electron';
 import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { WindowManager } from './windowManager.js';
 import { ServerManager } from './serverManager.js';
 import { DatabaseManager } from './databaseManager.js';
 import { ActivityWatchManager } from './activityWatchManager.js';
-import { UpdateManager } from './updateManager.js';
+import { MenuManager } from './menuManager.js';
+import { settingsManager } from './settingsManager.js';
 import { logger } from './logger.js';
+import { DEFAULT_SERVER_PORT } from '../shared/constants.js';
+import updateElectronApp from 'update-electron-app';
 
-// ES module __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = import.meta.dirname;
 
 // Keep references to main components
 let windowManager;
 let serverManager;
 let databaseManager;
 let activityWatchManager;
-let updateManager;
+let menuManager;
 
 // Enable live reload for development (will be loaded after app is ready)
 let enableLiveReload = false;
 if (process.env.NODE_ENV === 'development') {
   enableLiveReload = true;
 }
-
-// Server management is now handled by ServerManager class
 
 // App event handlers
 app.whenReady().then(async () => {
@@ -69,21 +66,35 @@ app.whenReady().then(async () => {
     const awStatus = await activityWatchManager.detectActivityWatch();
     logger.info('ActivityWatch status:', awStatus);
     
+    // If setting is enabled and AW is installed but not running, start it
+    if (settingsManager.get('manageActivityWatch') && awStatus.installed && !awStatus.running) {
+      try {
+        await activityWatchManager.startActivityWatch();
+        logger.info('ActivityWatch auto-started (managed by Kairos)');
+      } catch (error) {
+        logger.warn('Failed to auto-start ActivityWatch:', error);
+      }
+    }
+    
     // Create main window
     const mainWindow = windowManager.createWindow();
     logger.info('Main window created');
     
     // Load content based on environment
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = process.env.NODE_ENV === 'development';
     logger.info('Loading content in development mode:', isDev);
     windowManager.loadContent(isDev);
     
     // Setup auto-updater (only in production)
     if (!isDev) {
-      updateManager = new UpdateManager(windowManager);
-      updateManager.enableAutoCheck(24); // Check every 24 hours
-      logger.info('Auto-updater enabled with 24-hour check interval');
+      updateElectronApp({ logger });
+      logger.info('Auto-updater enabled via update-electron-app');
     }
+    
+    // Setup application menu
+    menuManager = new MenuManager(windowManager);
+    menuManager.buildMenu();
+    logger.info('Application menu created');
     
     logger.info('App startup completed successfully');
     
@@ -113,67 +124,58 @@ app.on('activate', () => {
       windowManager = new WindowManager();
     }
     windowManager.createWindow();
-    const isDev = process.env.NODE_ENV === 'development';
-    windowManager.loadContent(isDev);
+    windowManager.loadContent(process.env.NODE_ENV === 'development');
   }
 });
 
-app.on('before-quit', async () => {
+let isQuitting = false;
+
+app.on('before-quit', (event) => {
+  if (isQuitting) return; // already cleaning up
+  isQuitting = true;
+  event.preventDefault(); // block quit until cleanup finishes
+  
   logger.info('App quit initiated - performing cleanup');
   
-  // Save window state
-  if (windowManager) {
-    windowManager.saveWindowState();
-    logger.info('Window state saved');
-  }
-  
-  // Stop ActivityWatch if we started it
-  if (activityWatchManager) {
-    try {
-      await activityWatchManager.stopActivityWatch();
-      logger.info('ActivityWatch stopped successfully');
-    } catch (error) {
-      logger.error('Error stopping ActivityWatch:', error);
+  const doCleanup = async () => {
+    // Save window state
+    if (windowManager) {
+      windowManager.saveWindowState();
+      logger.info('Window state saved');
     }
-  }
-  
-  // Gracefully shutdown local server
-  if (serverManager) {
-    await serverManager.stopServer();
-  }
-  
-  // Cleanup old database backups
-  if (databaseManager) {
-    await databaseManager.cleanupOldBackups();
-  }
-});
-
-// Setup IPC handlers for server management
-ipcMain.handle('app-get-server-port', () => {
-  return serverManager?.getServerInfo()?.port || 3000;
-});
-
-ipcMain.handle('app-get-server-info', () => {
-  return serverManager?.getServerInfo() || { port: 3000, isReady: false, isRunning: false };
-});
-
-ipcMain.handle('app-restart-server', async () => {
-  if (serverManager) {
-    try {
-      return await serverManager.restartServer();
-    } catch (error) {
-      console.error('Server restart failed:', error);
-      throw error;
+    
+    // Stop ActivityWatch if we started it and setting is enabled
+    if (activityWatchManager && settingsManager.get('manageActivityWatch')) {
+      try {
+        await activityWatchManager.stopActivityWatch();
+        logger.info('ActivityWatch stopped successfully');
+      } catch (error) {
+        logger.error('Error stopping ActivityWatch:', error);
+      }
     }
-  }
-  throw new Error('Server manager not initialized');
+    
+    // Gracefully shutdown local server
+    if (serverManager) {
+      await serverManager.stopServer();
+      logger.info('Server stopped');
+    }
+    
+    // Cleanup old database backups
+    if (databaseManager) {
+      await databaseManager.cleanupOldBackups();
+    }
+    
+    // All cleanup done — quit for real
+    app.quit();
+  };
+  
+  doCleanup().catch((err) => {
+    logger.error('Cleanup error, forcing quit:', err);
+    app.exit(1);
+  });
 });
 
 // Setup IPC handlers for database management
-ipcMain.handle('db-get-path', () => {
-  return databaseManager?.getDatabasePath();
-});
-
 ipcMain.handle('db-get-info', async () => {
   if (databaseManager) {
     return await databaseManager.getDatabaseInfo();
@@ -186,7 +188,7 @@ ipcMain.handle('db-backup', async () => {
     try {
       return await databaseManager.backupDatabase();
     } catch (error) {
-      console.error('Database backup failed:', error);
+      logger.error('Database backup failed:', error);
       throw error;
     }
   }
@@ -201,9 +203,12 @@ ipcMain.handle('aw-get-status', () => {
 ipcMain.handle('aw-start', async () => {
   if (activityWatchManager) {
     try {
-      return await activityWatchManager.startActivityWatch();
+      if (settingsManager.get('manageActivityWatch')) {
+        return await activityWatchManager.startActivityWatch();
+      }
+      return await activityWatchManager.connect();
     } catch (error) {
-      console.error('Failed to start ActivityWatch:', error);
+      logger.error('Failed to connect to ActivityWatch:', error);
       throw error;
     }
   }
@@ -213,79 +218,28 @@ ipcMain.handle('aw-start', async () => {
 ipcMain.handle('aw-stop', async () => {
   if (activityWatchManager) {
     try {
-      return await activityWatchManager.stopActivityWatch();
+      if (settingsManager.get('manageActivityWatch')) {
+        return await activityWatchManager.stopActivityWatch();
+      }
+      return activityWatchManager.disconnect();
     } catch (error) {
-      console.error('Failed to stop ActivityWatch:', error);
+      logger.error('Failed to disconnect from ActivityWatch:', error);
       throw error;
     }
   }
   throw new Error('ActivityWatch manager not initialized');
 });
 
-ipcMain.handle('aw-restart', async () => {
-  if (activityWatchManager) {
-    try {
-      return await activityWatchManager.restartActivityWatch();
-    } catch (error) {
-      console.error('Failed to restart ActivityWatch:', error);
-      throw error;
-    }
-  }
-  throw new Error('ActivityWatch manager not initialized');
+// Setup IPC handlers for app settings
+ipcMain.handle('settings-get', () => {
+  return settingsManager.getAll();
 });
 
-ipcMain.handle('aw-show-info', () => {
-  if (activityWatchManager) {
-    activityWatchManager.showActivityWatchInfo();
-  }
+ipcMain.handle('settings-set', (_event, partial) => {
+  return settingsManager.set(partial);
 });
 
-// Setup IPC handlers for auto-updater
+// Application version
 ipcMain.handle('app-get-version', () => {
   return app.getVersion();
 });
-
-ipcMain.handle('updater-check', async () => {
-  if (updateManager) {
-    return await updateManager.manualUpdateCheck();
-  }
-  throw new Error('Update manager not available in development mode');
-});
-
-ipcMain.handle('updater-download', async () => {
-  if (updateManager) {
-    return await updateManager.downloadUpdate();
-  }
-  throw new Error('Update manager not available in development mode');
-});
-
-ipcMain.handle('updater-install', () => {
-  if (updateManager) {
-    return updateManager.installUpdate();
-  }
-  throw new Error('Update manager not available in development mode');
-});
-
-ipcMain.handle('updater-get-status', () => {
-  if (updateManager) {
-    return updateManager.getUpdateStatus();
-  }
-  return { isChecking: false, isUpdateAvailable: false, isUpdateDownloaded: false, updateInfo: null };
-});
-
-// Export for use in other modules
-export {
-  windowManager,
-  serverManager,
-  databaseManager,
-  activityWatchManager,
-  updateManager
-};
-
-export const getMainWindow = () => windowManager?.getWindow();
-export const getServerPort = () => serverManager?.getServerInfo()?.port;
-export const getWindowManager = () => windowManager;
-export const getServerManager = () => serverManager;
-export const getDatabaseManager = () => databaseManager;
-export const getActivityWatchManager = () => activityWatchManager;
-export const getUpdateManager = () => updateManager;

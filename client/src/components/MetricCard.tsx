@@ -8,20 +8,25 @@ interface MetricCardProps {
   unit?: string;
   icon?: React.ReactNode;
   trendPeriod?: string;
+  /** When true, a positive change is bad (red) and negative is good (green). */
+  invertTrend?: boolean;
 }
 
-export default function MetricCard({ title, value, change, unit = "", icon, trendPeriod = "yesterday" }: MetricCardProps) {
+export default function MetricCard({ title, value, change, unit = "", icon, trendPeriod = "yesterday", invertTrend = false }: MetricCardProps) {
+  const positiveColor = invertTrend ? "text-chart-5" : "text-chart-2";
+  const negativeColor = invertTrend ? "text-chart-2" : "text-chart-5";
+
   const getTrendIcon = () => {
     if (change === undefined) return null;
-    if (change > 0) return <TrendingUp className="h-4 w-4 text-chart-2" />;
-    if (change < 0) return <TrendingDown className="h-4 w-4 text-chart-5" />;
+    if (change > 0) return <TrendingUp className={`h-4 w-4 ${positiveColor}`} />;
+    if (change < 0) return <TrendingDown className={`h-4 w-4 ${negativeColor}`} />;
     return <Minus className="h-4 w-4 text-muted-foreground" />;
   };
 
   const getTrendColor = () => {
     if (change === undefined) return "text-muted-foreground";
-    if (change > 0) return "text-chart-2";
-    if (change < 0) return "text-chart-5";
+    if (change > 0) return positiveColor;
+    if (change < 0) return negativeColor;
     return "text-muted-foreground";
   };
 

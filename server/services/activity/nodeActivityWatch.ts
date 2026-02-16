@@ -1,97 +1,42 @@
 import * as cron from 'node-cron';
 import { storage } from '../storage';
-import { spawn } from 'child_process';
-import * as path from 'path';
 import type { ActivityBucket } from '../../../shared/schema';
-import { ACTIVITY_CONFIG } from '../../../shared/constants';
+import { ACTIVITY_CONFIG, DEFAULT_ACTIVITY_WATCH_URL } from '../../../shared/constants.js';
+import { ActivityWatchService, type AnalysisResult } from './activityWatchService';
 
 export class NodeActivityWatchService {
   private static readonly BUCKET_SIZE_MINUTES = ACTIVITY_CONFIG.BUCKET_SIZE_MINUTES;
   private static readonly SESSION_WINDOW_SIZE = ACTIVITY_CONFIG.SESSION_WINDOW_SIZE;
   
-  private pythonScriptPath: string;
-  private testing: boolean;
+  private awService: ActivityWatchService;
 
-  constructor(testing = false) {
-    this.testing = testing;
-    this.pythonScriptPath = path.join(__dirname, 'activity_watch_service.py');
+  constructor(baseUrl: string = DEFAULT_ACTIVITY_WATCH_URL) {
+    this.awService = new ActivityWatchService(baseUrl);
     this.startCronJobs();
   }
 
   private startCronJobs() {
-    // For testing with fractional minutes, use setInterval instead of cron
     if (NodeActivityWatchService.BUCKET_SIZE_MINUTES < 1) {
       const intervalMs = NodeActivityWatchService.BUCKET_SIZE_MINUTES * 60 * 1000;
       setInterval(() => this.processRecentActivity(), intervalMs);
-      console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes (${intervalMs}ms intervals for testing)`);
+      console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes (testing interval)`);
     } else {
-      // Use cron for whole minute intervals
       cron.schedule(`*/${NodeActivityWatchService.BUCKET_SIZE_MINUTES} * * * *`, () => this.processRecentActivity());
-      console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes (checking for completed ${NodeActivityWatchService.BUCKET_SIZE_MINUTES}-min intervals)`);
+      console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes`);
     }
   }
 
-  private async runPythonProcessor(start: Date, end: Date, sessionWindow?: ActivityBucket[]): Promise<ActivityBucket | null> {
-    return new Promise((resolve, reject) => {
-      const args = [
-        this.pythonScriptPath,
-        '--start', start.toISOString(),
-        '--end', end.toISOString()
-      ];
-      
-      // Add session window data if provided
-      if (sessionWindow && sessionWindow.length > 0) {
-        args.push('--session-window', JSON.stringify(sessionWindow));
-      }
-      
-      if (this.testing) {
-        args.push('--testing');
-      }
-
-      // Use the virtual environment Python executable
-      const pythonExecutable = path.join(__dirname, '..', '..', '..', '.venv', 'Scripts', 'python.exe');
-      const pythonProcess = spawn(pythonExecutable, args);
-      
-      let stdout = '';
-      let stderr = '';
-      
-      pythonProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-      
-      pythonProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-      
-      pythonProcess.on('close', (code) => {
-        // Always show stderr (contains logging output)
-        if (stderr.trim()) {
-          console.log('Python stderr:', stderr);
-        }
-        
-        if (code === 0) {
-          try {
-            const result = JSON.parse(stdout);
-            
-            if (result.error) resolve(null); else resolve(result);
-          } catch (parseError) {
-            console.error('Failed to parse Python output:', parseError); resolve(null);
-          }
-        } else {
-          console.error('Python processor failed:', code, stderr); resolve(null);
-        }
-      });
-      
-      pythonProcess.on('error', (error) => {
-        console.error('Failed to start Python processor:', error); resolve(null);
-      });
-    });
+  async analyzeBuckets(start: Date, end: Date, sessionWindow?: ActivityBucket[]): Promise<AnalysisResult | null> { 
+    return this.awService.analyzeBucket(start, end, sessionWindow ?? []);
   }
-  async analyzeBuckets(start: Date, end: Date, sessionWindow?: ActivityBucket[]): Promise<ActivityBucket | null> { 
-    return this.runPythonProcessor(start, end, sessionWindow); 
+
+  async isActivityWatchRunning(): Promise<boolean> {
+    return this.awService.isAvailable();
   }
 
   async processRecentActivity(): Promise<void> {
+    // Skip if AW isn't responding — avoids unnecessary work
+    if (!await this.awService.isAvailable()) return;
     try {
       const now = new Date();
       const bucketSizeMs = NodeActivityWatchService.BUCKET_SIZE_MINUTES * 60 * 1000;
