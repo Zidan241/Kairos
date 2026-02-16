@@ -7,7 +7,6 @@ import { ActivityWatchManager } from './activityWatchManager.js';
 import { MenuManager } from './menuManager.js';
 import { settingsManager } from './settingsManager.js';
 import { logger } from './logger.js';
-import { DEFAULT_SERVER_PORT } from '../shared/constants.js';
 import updateElectronApp from 'update-electron-app';
 
 const __dirname = import.meta.dirname;
@@ -62,6 +61,12 @@ app.whenReady().then(async () => {
     const serverInfo = await serverManager.startServer();
     logger.info('Server started:', serverInfo);
     
+    // Give ActivityWatch manager access to server port for pause/resume
+    activityWatchManager.setServerPort(serverInfo.port);
+
+    // Expose server port to renderer
+    ipcMain.handle('get-server-port', () => serverInfo.port);
+
     // Check ActivityWatch availability (non-blocking)
     const awStatus = await activityWatchManager.detectActivityWatch();
     logger.info('ActivityWatch status:', awStatus);
@@ -203,9 +208,6 @@ ipcMain.handle('aw-get-status', () => {
 ipcMain.handle('aw-start', async () => {
   if (activityWatchManager) {
     try {
-      if (settingsManager.get('manageActivityWatch')) {
-        return await activityWatchManager.startActivityWatch();
-      }
       return await activityWatchManager.connect();
     } catch (error) {
       logger.error('Failed to connect to ActivityWatch:', error);
@@ -218,10 +220,7 @@ ipcMain.handle('aw-start', async () => {
 ipcMain.handle('aw-stop', async () => {
   if (activityWatchManager) {
     try {
-      if (settingsManager.get('manageActivityWatch')) {
-        return await activityWatchManager.stopActivityWatch();
-      }
-      return activityWatchManager.disconnect();
+      return await activityWatchManager.disconnect();
     } catch (error) {
       logger.error('Failed to disconnect from ActivityWatch:', error);
       throw error;

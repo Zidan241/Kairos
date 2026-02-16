@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 
@@ -43,7 +43,13 @@ export default function Reports() {
 
   // Day tab — real data
   const dayDateStr = selectedDate.toISOString().split('T')[0];
-  const { data: dayReport, isLoading: dayLoading } = useDayReport(dayDateStr);
+  const { data: dayReport, isLoading: dayLoading, refetch: refetchDay, isFetching: dayFetching } = useDayReport(dayDateStr);
+
+  async function handleRefresh() {
+    if (activeTab === 'day') {
+      await refetchDay();
+    }
+  }
 
   const formatDateForTab = (date: Date, tab: 'day' | 'week' | 'month') => {
     if (tab === 'day') {
@@ -66,6 +72,14 @@ export default function Reports() {
           <p className="text-muted-foreground">Productivity insights and analytics</p>
         </div>
         <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={dayFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${dayFetching ? 'animate-spin' : ''}`} />
+          </Button>
           <Popover>
             <PopoverTrigger asChild>
               <Button

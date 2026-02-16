@@ -8,3 +8,4 @@ vite.config.ts.*
 venv
 .venv
 __pycache__
+out/

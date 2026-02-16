@@ -7,6 +7,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Application info
   getAppVersion: () => ipcRenderer.invoke('app-get-version'),
+  getServerPort: () => ipcRenderer.invoke('get-server-port'),
 
   // Database operations
   getDatabaseInfo: () => ipcRenderer.invoke('db-get-info'),

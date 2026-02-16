@@ -145,7 +145,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.get("/activity/status", asyncHandler(async (req: any, res: any) => {
     const running = await activityWatchService.isActivityWatchRunning();
-    res.json({ available: running, running });
+    res.json({ available: running, running, paused: activityWatchService.isPaused() });
+  }));
+
+  apiRouter.post("/activity/pause", asyncHandler(async (_req: any, res: any) => {
+    activityWatchService.pause();
+    res.json({ paused: true });
+  }));
+
+  apiRouter.post("/activity/resume", asyncHandler(async (_req: any, res: any) => {
+    activityWatchService.resume();
+    res.json({ paused: false });
   }));
 
   apiRouter.get("/activity/task-transition", asyncHandler(async (req: any, res: any) => {

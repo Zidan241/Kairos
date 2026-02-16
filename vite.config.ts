@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { DEFAULT_SERVER_PORT } from "./shared/constants.js";
-
 export default defineConfig({
   plugins: [
     react(),
@@ -24,6 +23,7 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    // Proxy is used in browser/dev mode only. In Electron, absolute URLs bypass this.
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.PORT || DEFAULT_SERVER_PORT}`,

@@ -1,4 +1,5 @@
 import express, { type Request, Response } from "express";
+import cors from "cors";
 import { registerRoutes } from "../api/routes";
 import { serveStatic, log } from "../dev/vite";
 import { setupLoggingMiddleware, setupErrorHandler } from "./middleware";
@@ -8,6 +9,9 @@ import { DEFAULT_SERVER_PORT } from "../../shared/constants.js";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Allow cross-origin requests from Electron renderer / Vite dev server
+app.use(cors());
 
 // Setup request logging middleware
 app.use(setupLoggingMiddleware());
@@ -33,8 +37,6 @@ app.use(setupLoggingMiddleware());
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // this serves both the API and the client.
   const port = parseInt(process.env.PORT || String(DEFAULT_SERVER_PORT), 10);
   server.listen({
     port,

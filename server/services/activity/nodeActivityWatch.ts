@@ -9,6 +9,9 @@ export class NodeActivityWatchService {
   private static readonly SESSION_WINDOW_SIZE = ACTIVITY_CONFIG.SESSION_WINDOW_SIZE;
   
   private awService: ActivityWatchService;
+  private paused = false;
+  private cronTask: cron.ScheduledTask | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(baseUrl: string = DEFAULT_ACTIVITY_WATCH_URL) {
     this.awService = new ActivityWatchService(baseUrl);
@@ -18,12 +21,36 @@ export class NodeActivityWatchService {
   private startCronJobs() {
     if (NodeActivityWatchService.BUCKET_SIZE_MINUTES < 1) {
       const intervalMs = NodeActivityWatchService.BUCKET_SIZE_MINUTES * 60 * 1000;
-      setInterval(() => this.processRecentActivity(), intervalMs);
+      this.intervalId = setInterval(() => this.processRecentActivity(), intervalMs);
       console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes (testing interval)`);
     } else {
-      cron.schedule(`*/${NodeActivityWatchService.BUCKET_SIZE_MINUTES} * * * *`, () => this.processRecentActivity());
+      this.cronTask = cron.schedule(`*/${NodeActivityWatchService.BUCKET_SIZE_MINUTES} * * * *`, () => this.processRecentActivity());
       console.log(`📊 Bucket processing every ${NodeActivityWatchService.BUCKET_SIZE_MINUTES} minutes`);
     }
+  }
+
+  /** Pause polling — server stops reading from ActivityWatch */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    if (this.cronTask) this.cronTask.stop();
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    console.log('⏸️  ActivityWatch polling paused');
+  }
+
+  /** Resume polling — server starts reading from ActivityWatch again */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.startCronJobs();
+    console.log('▶️  ActivityWatch polling resumed');
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   async analyzeBuckets(start: Date, end: Date, sessionWindow?: ActivityBucket[]): Promise<AnalysisResult | null> { 

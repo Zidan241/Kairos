@@ -1,4 +1,3 @@
-import { dialog } from 'electron';
 import { spawn } from 'child_process';
 import http from 'http';
 import path from 'path';
@@ -19,6 +18,8 @@ class ActivityWatchManager {
     this.statusCheckInterval = 30000; // Check every 30 seconds
     this.executablePath = null;
     this.activityWatchProcess = null;
+    this._operationInProgress = false;
+    this.serverPort = null;
     
     // Platform-specific paths where ActivityWatch might be installed
     this.platformPaths = {
@@ -231,6 +232,11 @@ class ActivityWatchManager {
   }
   
   async startActivityWatch() {
+    if (this._operationInProgress) {
+      logger.warn('ActivityWatch operation already in progress, skipping start');
+      return { status: 'busy', message: 'An operation is already in progress' };
+    }
+    this._operationInProgress = true;
     logger.info('Starting ActivityWatch...');
     
     try {
@@ -291,6 +297,7 @@ class ActivityWatchManager {
         this.isAvailable = true;
         this.isRunning = true;
         this.startHealthMonitoring();
+        await this.notifyServerPolling(true);
         
         logger.info('ActivityWatch started successfully');
         return { 
@@ -309,6 +316,8 @@ class ActivityWatchManager {
         status: 'error',
         message: error.message || 'Failed to start ActivityWatch'
       };
+    } finally {
+      this._operationInProgress = false;
     }
   }
   
@@ -344,33 +353,89 @@ class ActivityWatchManager {
   }
   
   /**
-   * Disconnect Kairos from ActivityWatch — stop monitoring but don't kill AW.
-   * The UI "Disconnect" button calls this.
+   * Set the server port so we can notify the server to pause/resume polling.
    */
-  disconnect() {
-    logger.info('Disconnecting from ActivityWatch...');
-    this.stopHealthMonitoring();
-    this.isRunning = false;
-    return { status: 'disconnected', message: 'Disconnected from ActivityWatch' };
+  setServerPort(port) {
+    this.serverPort = port;
   }
 
   /**
-   * Reconnect to ActivityWatch — re-detect and start monitoring.
-   * The UI "Connect" button calls this.
+   * Tell the server to pause or resume its ActivityWatch polling.
+   */
+  async notifyServerPolling(shouldPoll) {
+    if (!this.serverPort) return;
+    const endpoint = shouldPoll ? 'resume' : 'pause';
+    return new Promise((resolve) => {
+      const req = http.request(
+        `http://localhost:${this.serverPort}/api/activity/${endpoint}`,
+        { method: 'POST' },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve());
+        }
+      );
+      req.on('error', (err) => {
+        logger.warn(`Failed to ${endpoint} server polling:`, err.message);
+        resolve();
+      });
+      req.end();
+    });
+  }
+
+  /**
+   * Connect to ActivityWatch.
+   * If manageActivityWatch is enabled, starts the AW process.
+   * Otherwise, just detects and monitors an already-running instance.
+   * Also resumes server-side polling.
    */
   async connect() {
-    logger.info('Connecting to ActivityWatch...');
-    return await this.detectActivityWatch();
+    const managed = settingsManager.get('manageActivityWatch');
+    logger.info(`Connecting to ActivityWatch (managed: ${managed})...`);
+
+    if (managed) {
+      return await this.startActivityWatch();
+    }
+    const result = await this.detectActivityWatch();
+    if (result.running) {
+      await this.notifyServerPolling(true);
+    }
+    return result;
+  }
+
+  /**
+   * Disconnect from ActivityWatch.
+   * If manageActivityWatch is enabled, stops the AW process.
+   * Otherwise, stops health monitoring so we no longer read from it.
+   * Also pauses server-side polling.
+   */
+  async disconnect() {
+    const managed = settingsManager.get('manageActivityWatch');
+    logger.info(`Disconnecting from ActivityWatch (managed: ${managed})...`);
+
+    if (managed) {
+      return await this.stopActivityWatch();
+    }
+
+    this.stopHealthMonitoring();
+    this.isRunning = false;
+    await this.notifyServerPolling(false);
+    return { status: 'disconnected', message: 'Disconnected from ActivityWatch' };
   }
 
   async stopActivityWatch() {
+    if (this._operationInProgress) {
+      logger.warn('ActivityWatch operation already in progress, skipping stop');
+      return { status: 'busy', message: 'An operation is already in progress' };
+    }
+    this._operationInProgress = true;
     logger.info('Stopping ActivityWatch...');
     
     // Stop health monitoring
     this.stopHealthMonitoring();
+    await this.notifyServerPolling(false);
     
-    if (this.activityWatchProcess) {
-      try {
+    try {
+      if (this.activityWatchProcess) {
         // Try to kill the process we started
         this.activityWatchProcess.kill('SIGTERM');
         this.activityWatchProcess = null;
@@ -393,20 +458,22 @@ class ActivityWatchManager {
             message: 'ActivityWatch may still be running from system tray. Check your system tray icon.' 
           };
         }
-      } catch (error) {
-        logger.error('Error stopping ActivityWatch:', error);
+      } else {
+        // AW wasn't started by us — can't kill it, just disconnect
+        this.isRunning = false;
         return { 
-          status: 'error', 
-          message: 'Failed to stop ActivityWatch. Please stop it manually from system tray.' 
+          status: 'disconnected', 
+          message: 'ActivityWatch was not started by Kairos. Disconnected from monitoring. Stop it manually from your system tray if needed.' 
         };
       }
-    } else {
-      // AW wasn't started by us — can't kill it, just disconnect
-      this.isRunning = false;
+    } catch (error) {
+      logger.error('Error stopping ActivityWatch:', error);
       return { 
-        status: 'disconnected', 
-        message: 'ActivityWatch was not started by Kairos. Disconnected from monitoring. Stop it manually from your system tray if needed.' 
+        status: 'error', 
+        message: 'Failed to stop ActivityWatch. Please stop it manually from system tray.' 
       };
+    } finally {
+      this._operationInProgress = false;
     }
   }
   
@@ -430,53 +497,6 @@ class ActivityWatchManager {
     };
   }
   
-  async restartActivityWatch() {
-    logger.info('Restarting ActivityWatch...');
-    
-    // Stop first if we have a managed process
-    if (this.activityWatchProcess) {
-      await this.stopActivityWatch();
-      // Brief pause before restarting
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    return await this.startActivityWatch();
-  }
-  
-  // Show user-friendly dialog about ActivityWatch status
-  showActivityWatchInfo() {
-    const status = this.getStatus();
-    
-    if (!status.available && !status.executablePath) {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'ActivityWatch Not Found',
-        message: 'ActivityWatch Integration',
-        detail: `ActivityWatch was not detected on your system. Kairos can still function normally, but time tracking features will be limited.\n\nTo enable full time tracking:\n1. Install ActivityWatch from https://activitywatch.net/\n2. Kairos can automatically start it for you\n\nAPI URL checked: ${status.apiUrl}`,
-        buttons: ['OK']
-      });
-    } else if (status.executablePath && !status.running) {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'ActivityWatch Available',
-        message: 'ActivityWatch Integration',
-        detail: `ActivityWatch is installed but not currently running.\n\nExecutable found at:\n${status.executablePath}\n\nYou can:\n• Use the Settings page to start ActivityWatch\n• Start it manually from your applications\n\nAPI URL: ${status.apiUrl}\nLast check: ${status.lastHealthCheck?.toLocaleTimeString() || 'Never'}`,
-        buttons: ['OK']
-      });
-    } else if (status.running) {
-      const managedText = status.managedByKairos ? 
-        `Managed by Kairos (PID: ${status.pid})` : 
-        'Running independently';
-        
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'ActivityWatch Running',
-        message: 'ActivityWatch Integration',
-        detail: `ActivityWatch is running and connected!\n\nStatus: ${managedText}\nAPI URL: ${status.apiUrl}\nTime tracking is active.\nLast check: ${status.lastHealthCheck?.toLocaleTimeString()}`,
-        buttons: ['OK']
-      });
-    }
-  }
 }
 
 export { ActivityWatchManager };

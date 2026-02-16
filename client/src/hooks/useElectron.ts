@@ -12,6 +12,7 @@ export interface AppSettings {
 export interface ElectronAPI {
   // Application info
   getAppVersion: () => Promise<string>;
+  getServerPort: () => Promise<number>;
   
   // Database operations
   getDatabaseInfo: () => Promise<{
