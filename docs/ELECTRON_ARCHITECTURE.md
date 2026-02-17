@@ -2,7 +2,7 @@
 
 ## Architecture
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────┐
 │                    Electron Main Process                     │
 │  WindowManager · ServerManager · DatabaseManager            │

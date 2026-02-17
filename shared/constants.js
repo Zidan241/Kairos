@@ -14,10 +14,10 @@ export const DEV_VITE_URL = 'http://localhost:5173';
 // Activity tracking configuration
 export const ACTIVITY_CONFIG = {
   // How often we process activity buckets (in minutes)
-  BUCKET_SIZE_MINUTES: 0.5,
+  BUCKET_SIZE_MINUTES: 5,
   
   // How many recent buckets to consider for session context
-  SESSION_WINDOW_SIZE: 5,
+  SESSION_WINDOW_SIZE: 6,
   
   // How long to cache metrics data in the frontend (in milliseconds)
   // Should be related to bucket processing frequency for optimal data freshness

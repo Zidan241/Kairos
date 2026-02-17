@@ -7,6 +7,7 @@ export interface AppSettings {
   manageActivityWatch: boolean;
   activityWatchPath: string;
   activityWatchUrl: string;
+  activityWatchDisconnectedByUser: boolean;
 }
 
 export interface ElectronAPI {

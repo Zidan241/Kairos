@@ -141,6 +141,3 @@ export type TaskScheduleHistory = typeof taskScheduleHistory.$inferSelect;
 
 export type ActivityBucket = typeof activityBuckets.$inferSelect;
 export type InsertActivityBucket = typeof insertActivityBucketSchema._type;
-
-// Helper type for JSON data
-export type Json = Record<string, any>;

@@ -67,7 +67,7 @@ export class ActivityWatchService {
     this.client = new ActivityWatchClient(baseUrl);
   }
 
-  async isAvailable(): Promise<boolean> {
+  async isRunning(): Promise<boolean> {
     return this.client.isRunning();
   }
 

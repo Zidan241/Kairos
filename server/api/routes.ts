@@ -7,6 +7,7 @@ import { activityWatchService } from "../services/activity/nodeActivityWatch";
 import { 
   insertTaskSchema, insertSubtaskSchema
 } from "@shared/schema";
+import { dateUtils } from "@shared/utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create API router to prevent fallthrough to Vite
@@ -124,21 +125,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // -------------------------
   apiRouter.get("/metrics/daily", asyncHandler(async (req: any, res: any) => {
     const date = req.query.date as string;
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-
-    if (startDate && endDate) {
-      const metrics = await metricsService.getDateRangeMetrics(startDate, endDate);
-      res.json(metrics);
-    } else {
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const metrics = await metricsService.getDailyMetrics(targetDate);
-      res.json(metrics);
-    }
+    const targetDate = date || dateUtils.getTodayDate();
+    const metrics = await metricsService.getDailyMetrics(targetDate);
+    res.json(metrics);
   }));
 
   apiRouter.get("/metrics/day-report", asyncHandler(async (req: any, res: any) => {
-    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const date = (req.query.date as string) || dateUtils.getTodayDate();
     const report = await metricsService.getDayReportMetrics(date);
     res.json(report);
   }));

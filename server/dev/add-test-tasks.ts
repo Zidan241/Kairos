@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { db } from "../core/database";
 import { tasks, subtasks, activityBuckets } from "../../shared/schema";
+import { dateUtils } from "../../shared/utils";
 
 // use bun run server/add-test-tasks.ts to run
 
@@ -26,14 +27,14 @@ async function clearTables() {
 }
 
 async function addTestData() {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dayAfterTomorrow = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const fourDaysFromNow = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const fiveDaysFromNow = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const today = dateUtils.getTodayDate();
+  const yesterday = dateUtils.formatDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const twoDaysAgo = dateUtils.formatDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000));
+  const threeDaysAgo = dateUtils.formatDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000));
+  const tomorrow = dateUtils.formatDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const dayAfterTomorrow = dateUtils.formatDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
+  const fourDaysFromNow = dateUtils.formatDate(new Date(Date.now() + 4 * 24 * 60 * 60 * 1000));
+  const fiveDaysFromNow = dateUtils.formatDate(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000));
   
   console.log(`Adding hackathon project test data across multiple days:`);
   console.log(`  Three days ago: ${threeDaysAgo} (spec written)`);

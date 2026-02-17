@@ -15,29 +15,7 @@ import { eq, desc, asc, inArray, sql } from "drizzle-orm";
 import { metricsService } from "./metrics";
 import { dateUtils } from "@shared/utils";
 
-export interface IStorage {
-  // Task operations
-  createTask(task: InsertTask): Promise<Task>;
-  updateTask(id: number, updates: Partial<UpdateTask>): Promise<Task | undefined>;
-  deleteTask(id: number): Promise<boolean>;
-  
-  // Subtask operations
-  getActiveSubtask(): Promise<Subtask | undefined>;
-  getScheduledSubtasks(date: string): Promise<Subtask[]>;
-  createSubtask(subtask: InsertSubtask): Promise<Subtask>;
-  updateSubtask(id: number, updates: Partial<UpdateSubtask>): Promise<Subtask | undefined>;
-  deleteSubtask(id: number): Promise<boolean>;
-  
-  // Optimized composite operations
-  getTasksWithMetrics(sortBy?: string, sortOrder?: string): Promise<TaskWithMetrics[]>;
-  getDayPlanWithMetrics(): Promise<TaskWithMetrics[]>;
-  
-  // Activity bucket operations
-  getLatestBuckets(limit?: number): Promise<ActivityBucket[]>;
-  createActivityBucket(bucket: InsertActivityBucket): Promise<ActivityBucket>;
-}
-
-export class SQLiteStorage implements IStorage {
+export class SQLiteStorage {
   // -------------------------
   // Task operations
   // -------------------------
@@ -50,7 +28,6 @@ export class SQLiteStorage implements IStorage {
   async updateTask(id: number, updates: Partial<UpdateTask>): Promise<Task | undefined> {
     const finalUpdates: any = { ...updates };
     if (updates.isCompleted === true) {
-      finalUpdates.isActive = false;
       finalUpdates.completedAt = new Date().toISOString();
     } else if (updates.isCompleted === false) {
       // If unmarking as completed, clear the completedAt timestamp
@@ -80,7 +57,7 @@ export class SQLiteStorage implements IStorage {
   async updateSubtask(id: number, updates: Partial<UpdateSubtask>): Promise<Subtask | undefined> {
     // Handle completion status - when marking as completed, set isActive to false and completedAt timestamp
     const finalUpdates = { ...updates };
-    var completedAt;
+    let completedAt;
     
     if (updates.isCompleted === true) {
       finalUpdates.isActive = false;

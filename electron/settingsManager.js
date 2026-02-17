@@ -19,6 +19,8 @@ const DEFAULTS = {
   activityWatchPath: '',
   /** ActivityWatch server URL */
   activityWatchUrl: DEFAULT_ACTIVITY_WATCH_URL,
+  /** Whether the user explicitly disconnected ActivityWatch */
+  activityWatchDisconnectedByUser: false,
 };
 
 /** @typedef {typeof DEFAULTS} AppSettings */

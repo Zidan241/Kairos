@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { storage } from '../storage';
 import type { ActivityBucket } from '../../../shared/schema';
 import { ACTIVITY_CONFIG, DEFAULT_ACTIVITY_WATCH_URL } from '../../../shared/constants.js';
+import { dateUtils } from '../../../shared/utils';
 import { ActivityWatchService, type AnalysisResult } from './activityWatchService';
 
 export class NodeActivityWatchService {
@@ -58,12 +59,12 @@ export class NodeActivityWatchService {
   }
 
   async isActivityWatchRunning(): Promise<boolean> {
-    return this.awService.isAvailable();
+    return this.awService.isRunning();
   }
 
   async processRecentActivity(): Promise<void> {
     // Skip if AW isn't responding — avoids unnecessary work
-    if (!await this.awService.isAvailable()) return;
+    if (!await this.awService.isRunning()) return;
     try {
       const now = new Date();
       const bucketSizeMs = NodeActivityWatchService.BUCKET_SIZE_MINUTES * 60 * 1000;
@@ -74,7 +75,7 @@ export class NodeActivityWatchService {
       const previousBucketEnd = new Date(currentBucketStart.getTime());
   
       
-      const dateStr = previousBucketStart.toISOString().split('T')[0];
+      const dateStr = dateUtils.formatDate(previousBucketStart);
       
       // Get latest buckets globally for session window context
       const sessionWindow = await storage.getLatestBuckets(NodeActivityWatchService.SESSION_WINDOW_SIZE);

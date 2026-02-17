@@ -68,13 +68,17 @@ app.whenReady().then(async () => {
     ipcMain.handle('get-server-port', () => serverInfo.port);
 
     // Check ActivityWatch availability (non-blocking)
-    const awStatus = await activityWatchManager.detectActivityWatch();
-    logger.info('ActivityWatch status:', awStatus);
+    await activityWatchManager.detectActivityWatch();
     
-    // If setting is enabled and AW is installed but not running, start it
-    if (settingsManager.get('manageActivityWatch') && awStatus.installed && !awStatus.running) {
+    // If setting is enabled, AW is installed but not running, and user didn't explicitly disconnect — auto-start
+    if (
+      settingsManager.get('manageActivityWatch') &&
+      !settingsManager.get('activityWatchDisconnectedByUser') &&
+      activityWatchManager.isAvailable &&
+      !activityWatchManager.isRunning
+    ) {
       try {
-        await activityWatchManager.startActivityWatch();
+        await activityWatchManager.connect();
         logger.info('ActivityWatch auto-started (managed by Kairos)');
       } catch (error) {
         logger.warn('Failed to auto-start ActivityWatch:', error);
@@ -149,13 +153,13 @@ app.on('before-quit', (event) => {
       logger.info('Window state saved');
     }
     
-    // Stop ActivityWatch if we started it and setting is enabled
-    if (activityWatchManager && settingsManager.get('manageActivityWatch')) {
+    // Clean up ActivityWatch (stop process if managed, stop monitoring otherwise)
+    if (activityWatchManager) {
       try {
-        await activityWatchManager.stopActivityWatch();
-        logger.info('ActivityWatch stopped successfully');
+        await activityWatchManager.cleanup();
+        logger.info('ActivityWatch cleaned up successfully');
       } catch (error) {
-        logger.error('Error stopping ActivityWatch:', error);
+        logger.error('Error cleaning up ActivityWatch:', error);
       }
     }
     
@@ -197,36 +201,36 @@ ipcMain.handle('db-backup', async () => {
       throw error;
     }
   }
-  throw new Error('Database manager not initialized');
+  return { error: 'Database manager not initialized' };
 });
 
 // Setup IPC handlers for ActivityWatch management
 ipcMain.handle('aw-get-status', () => {
-  return activityWatchManager?.getStatus() || { available: false, running: false };
+  if (!activityWatchManager) return { available: false, running: false };
+  return {
+    available: activityWatchManager.isAvailable || activityWatchManager.isRunning,
+    running: activityWatchManager.isRunning,
+  };
 });
 
 ipcMain.handle('aw-start', async () => {
-  if (activityWatchManager) {
-    try {
-      return await activityWatchManager.connect();
-    } catch (error) {
-      logger.error('Failed to connect to ActivityWatch:', error);
-      throw error;
-    }
+  if (!activityWatchManager) return;
+  try {
+    await activityWatchManager.connect();
+  } catch (error) {
+    logger.error('Failed to connect to ActivityWatch:', error);
+    throw error;
   }
-  throw new Error('ActivityWatch manager not initialized');
 });
 
 ipcMain.handle('aw-stop', async () => {
-  if (activityWatchManager) {
-    try {
-      return await activityWatchManager.disconnect();
-    } catch (error) {
-      logger.error('Failed to disconnect from ActivityWatch:', error);
-      throw error;
-    }
+  if (!activityWatchManager) return;
+  try {
+    await activityWatchManager.disconnect();
+  } catch (error) {
+    logger.error('Failed to disconnect from ActivityWatch:', error);
+    throw error;
   }
-  throw new Error('ActivityWatch manager not initialized');
 });
 
 // Setup IPC handlers for app settings

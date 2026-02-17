@@ -42,6 +42,7 @@ export default function Settings() {
   const [dbInfo, setDbInfo] = useState<{ path: string; size: number } | null>(null);
   const [isToggling, setIsToggling] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
+  const [activityWatchDisconnectedByUser, setActivityWatchDisconnectedByUser] = useState(false);
 
   const refreshStatus = async () => {
     try {
@@ -64,6 +65,7 @@ export default function Settings() {
     try {
       if (activityWatchConnected) {
         await electron.stopActivityWatch();
+        setActivityWatchDisconnectedByUser(true);
         toast({
           title: manageActivityWatch ? "Stopped" : "Disconnected",
           description: manageActivityWatch
@@ -72,6 +74,7 @@ export default function Settings() {
         });
       } else {
         await electron.startActivityWatch();
+        setActivityWatchDisconnectedByUser(false);
         toast({
           title: manageActivityWatch ? "Started" : "Connected",
           description: manageActivityWatch
@@ -123,6 +126,7 @@ export default function Settings() {
       setManageActivityWatch(settings.manageActivityWatch);
       setActivityWatchPath(settings.activityWatchPath || '');
       setActivityWatchUrl(settings.activityWatchUrl || DEFAULT_ACTIVITY_WATCH_URL);
+      setActivityWatchDisconnectedByUser(settings.activityWatchDisconnectedByUser || false);
     }).catch(() => { });
   }, [electron]);
 
@@ -212,7 +216,7 @@ export default function Settings() {
                 >
                   {activityWatchConnected
                     ? (manageActivityWatch ? "Stop" : "Disconnect")
-                    : (manageActivityWatch ? "Start" : "Connect")}
+                    : (manageActivityWatch ? "Start" : (activityWatchDisconnectedByUser ? "Reconnect" : "Connect"))}
                 </Button>
               </div>
 
@@ -258,8 +262,8 @@ export default function Settings() {
                 </div>
               )}
 
-              {/* Custom executable path - Electron only */}
-              {isElectronApp && (
+              {/* Custom executable path - Electron only, managed mode */}
+              {isElectronApp && manageActivityWatch && (
                 <div className="space-y-1.5">
                   <Label htmlFor="aw-path">ActivityWatch Executable Path</Label>
                   <p className="text-sm text-muted-foreground">

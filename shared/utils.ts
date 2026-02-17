@@ -1,7 +1,13 @@
 export const dateUtils = {
-  // Get today's date in YYYY-MM-DD format
+  // Get today's date in YYYY-MM-DD format (local timezone)
   getTodayDate: (): string => {
-    return new Date().toISOString().split('T')[0];
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  },
+  
+  // Format a Date to YYYY-MM-DD in local timezone
+  formatDate: (date: Date): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   },
   
   // Get date range for week/month
@@ -13,8 +19,8 @@ export const dateUtils = {
     end.setDate(start.getDate() + 6);
     
     return {
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0]
+      start: dateUtils.formatDate(start),
+      end: dateUtils.formatDate(end)
     };
   },
   
@@ -24,8 +30,8 @@ export const dateUtils = {
     const end = new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 0);
     
     return {
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0]
+      start: dateUtils.formatDate(start),
+      end: dateUtils.formatDate(end)
     };
   }
 };

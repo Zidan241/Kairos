@@ -8,18 +8,11 @@ import {
 
 import { db } from "../core/database";
 import { eq, desc, inArray } from "drizzle-orm";
+import { dateUtils } from "@shared/utils";
 
 type ActivityCategory = ActivityBucket['category'];
 
-export interface IMetricsService {
-  getSubtaskMetricsBulk(subtaskIds: number[]): Promise<Record<number, SubtaskMetrics>>;
-  getDailyMetrics(date: string): Promise<DailyMetrics>;
-  getDayReportMetrics(date: string): Promise<DayReportMetrics>;
-  getDateRangeMetrics(startDate: string, endDate: string): Promise<DailyMetrics[]>;
-  checkTaskTransition(): Promise<boolean>;
-}
-
-export class MetricsService implements IMetricsService {
+export class MetricsService {
   
   /**
    * Get complete metrics for multiple subtasks efficiently
@@ -191,7 +184,7 @@ export class MetricsService implements IMetricsService {
     // Previous day for trend comparison
     const prevDate = new Date(date + 'T00:00:00');
     prevDate.setDate(prevDate.getDate() - 1);
-    const prevDateStr = prevDate.toISOString().split('T')[0];
+    const prevDateStr = dateUtils.formatDate(prevDate);
     const previousDayMetrics = await this.getDailyMetrics(prevDateStr);
     const previousDayBreakdown = previousDayMetrics.timeBreakdown.totalMinutes > 0
       ? previousDayMetrics.timeBreakdown
@@ -375,23 +368,6 @@ export class MetricsService implements IMetricsService {
     };
   }
 
-  /**
-   * Get daily metrics for a date range
-   */
-  async getDateRangeMetrics(startDate: string, endDate: string): Promise<DailyMetrics[]> {
-    const metrics: DailyMetrics[] = [];
-    const currentDate = new Date(startDate);
-    const endDateObj = new Date(endDate);
-    
-    while (currentDate <= endDateObj) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      const dailyMetrics = await this.getDailyMetrics(dateStr);
-      metrics.push(dailyMetrics);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    return metrics;
-  }
 
   /**
    * Calculate daily productivity metrics for a specific date

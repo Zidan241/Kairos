@@ -13,6 +13,7 @@ import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const ONBOARDING_COMPLETE_KEY = "kairos_onboarding_complete";
 
@@ -58,18 +59,21 @@ export default function App() {
   // Show onboarding on first launch
   if (showOnboarding) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Onboarding onComplete={handleOnboardingComplete} />
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Onboarding onComplete={handleOnboardingComplete} />
+            <Toaster />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
         <SidebarProvider style={style as React.CSSProperties}>
           <div className="flex h-screen w-full">
             <AppSidebar />
@@ -92,5 +96,6 @@ export default function App() {
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

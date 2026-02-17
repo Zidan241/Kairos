@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import DayReport from "@/components/reports/DayReport";
 import DateRangeSelector from "@/components/DateRangeSelector";
 import { useDayReport } from "@/hooks/useMetrics";
+import { dateUtils } from "@shared/utils";
 
 export default function Reports() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -15,7 +16,7 @@ export default function Reports() {
 
   const getDateRange = (type: 'day' | 'week' | 'month', baseDate: Date = selectedDate) => {
     if (type === 'day') {
-      const dateStr = baseDate.toISOString().split('T')[0];
+      const dateStr = dateUtils.formatDate(baseDate);
       return { startDate: dateStr, endDate: dateStr };
     } else if (type === 'week') {
       const date = new Date(baseDate);
@@ -26,8 +27,8 @@ export default function Reports() {
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       return {
-        startDate: monday.toISOString().split('T')[0],
-        endDate: sunday.toISOString().split('T')[0]
+        startDate: dateUtils.formatDate(monday),
+        endDate: dateUtils.formatDate(sunday)
       };
     } else {
       const year = baseDate.getFullYear();
@@ -35,14 +36,14 @@ export default function Reports() {
       const firstDay = new Date(year, month, 1);
       const lastDay = new Date(year, month + 1, 0);
       return {
-        startDate: firstDay.toISOString().split('T')[0],
-        endDate: lastDay.toISOString().split('T')[0]
+        startDate: dateUtils.formatDate(firstDay),
+        endDate: dateUtils.formatDate(lastDay)
       };
     }
   };
 
-  // Day tab — real data
-  const dayDateStr = selectedDate.toISOString().split('T')[0];
+  // Day tab
+  const dayDateStr = dateUtils.formatDate(selectedDate);
   const { data: dayReport, isLoading: dayLoading, refetch: refetchDay, isFetching: dayFetching } = useDayReport(dayDateStr);
 
   async function handleRefresh() {

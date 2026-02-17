@@ -1,15 +1,15 @@
 {
   "name": "kairos-desktop",
   "version": "1.0.0",
-  "description": "Personal productivity desktop app for task management, day planning, and focus tracking",
+  "description": "Personal productivity app for task management, day planning, and focus tracking",
   "author": "Mohamed Ahmed",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mohameahmed_microsoft/kairo.git"
+    "url": "https://github.com/Zidan241/Kairos.git"
   },
-  "homepage": "https://github.com/mohameahmed_microsoft/kairo#readme",
+  "homepage": "https://github.com/Zidan241/Kairos#readme",
   "scripts": {
     "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
     "dev:server": "bun run server/index.ts",
@@ -86,7 +86,6 @@
     "update-electron-app": "^3.1.2",
     "vaul": "^1.1.2",
     "wouter": "^3.3.5",
-    "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   },
@@ -107,7 +106,6 @@
     "@types/node": "^20.16.11",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "bun-types": "^1.2.22",
@@ -121,9 +119,6 @@
     "tsx": "^4.19.1",
     "typescript": "5.6.3",
     "vite": "^5.4.19"
-  },
-  "optionalDependencies": {
-    "bufferutil": "^4.0.8"
   },
   "main": "electron/main.js"
 }

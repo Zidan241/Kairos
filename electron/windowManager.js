@@ -151,7 +151,7 @@ class WindowManager {
       this.mainWindow.webContents.openDevTools();
     } else {
       // Production: load built files
-      this.mainWindow.loadFile(path.join(__dirname, '../client/dist/index.html')).catch(err => {
+      this.mainWindow.loadFile(path.join(__dirname, '../dist/public/index.html')).catch(err => {
         logger.error('Failed to load built files:', err);
         this.loadFallbackContent();
       });

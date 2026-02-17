@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, GripVertical, X, Calendar } from "lucide-react";
 import { useState } from "react";
 import { useScheduledSubtasks, useUpdateSubtask } from "@/hooks/useTasks";
+import { dateUtils } from "@shared/utils";
 
 // Quick calendar event type
 interface CalendarEvent {
@@ -21,7 +22,7 @@ interface DayScheduleTimelineProps {
 }
 
 export default function DayScheduleTimeline({ 
-  date = new Date().toISOString().split('T')[0],
+  date = dateUtils.getTodayDate(),
   onTaskScheduled,
   startHour = 6,  // Default: 6 AM
   endHour = 22    // Default: 10 PM

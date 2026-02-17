@@ -67,8 +67,3 @@ export function buildTaskHierarchyWithMetrics(
   
   return results;
 }
-
-// Helper to calculate total tracked time for a task from its subtasks
-export function calculateTaskTrackedTime(subtasks: SubtaskWithMetrics[]): number {
-  return subtasks.reduce((total, subtask) => total + subtask.metrics.timeBreakdown.totalMinutes, 0);
-}
