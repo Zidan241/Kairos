@@ -1,4 +1,5 @@
-import { Home, Settings, Target, TrendingUp } from "lucide-react";
+import { CircleDot, SlidersHorizontal, LayoutList, Sparkles } from "lucide-react";
+import { Link } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -12,24 +13,24 @@ import {
 
 const menuItems = [
   {
-    title: "Dashboard",
+    title: "Focus",
     url: "/",
-    icon: Home,
+    icon: CircleDot,
   },
   {
-    title: "Planning",
+    title: "Plan",
     url: "/planning",
-    icon: Target,
+    icon: LayoutList,
   },
   {
-    title: "Reports",
+    title: "Reflect",
     url: "/reports",
-    icon: TrendingUp,
+    icon: Sparkles,
   },
   {
     title: "Settings",
     url: "/settings",
-    icon: Settings,
+    icon: SlidersHorizontal,
   },
 ];
 
@@ -44,10 +45,10 @@ export default function AppSidebar() {
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

@@ -8,9 +8,6 @@ export const DEFAULT_SERVER_PORT = 5000;
 // Default ActivityWatch server URL
 export const DEFAULT_ACTIVITY_WATCH_URL = 'http://localhost:5600';
 
-// Vite dev server URL (Electron loads from here in development)
-export const DEV_VITE_URL = 'http://localhost:5173';
-
 // Activity tracking configuration
 export const ACTIVITY_CONFIG = {
   // How often we process activity buckets (in minutes)

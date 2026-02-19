@@ -77,12 +77,6 @@ export default function DayReport({ data, isLoading }: DayReportProps) {
               trendPeriod="previous day"
               icon={<Zap className="h-4 w-4 text-muted-foreground" />}
             />
-            <MetricCard
-              title="Daily Plan Execution"
-              value={pe ? pe.completionPercentage.toString() : "0"}
-              unit="%"
-              icon={<Target className="h-4 w-4 text-muted-foreground" />}
-            />
           </>
         )}
       </div>
@@ -97,7 +91,7 @@ export default function DayReport({ data, isLoading }: DayReportProps) {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Task Completion */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Tasks Completed</span>
                   <span className="text-2xl font-bold">{pe.completedCount}/{pe.totalCount}</span>

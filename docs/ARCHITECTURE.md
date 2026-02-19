@@ -10,9 +10,9 @@ Kairo is a desktop productivity app. It runs as an Electron app wrapping a Bun/E
 │   Process            │                    │
 │                      │                    │ HTTP
 │   • Window mgmt      │                    ▼
-│   • AW process ctrl  │              ┌──────────┐
+│                      │              ┌──────────┐
 │   • Settings (JSON)  │              │   Bun    │
-│   • DB path/backup   │              │  Server  │
+│   • DB path          │              │  Server  │
 │                      │── spawns ───►│  (child) │
 └──────────────────────┘              │          │
                                       │ • REST API
@@ -26,14 +26,14 @@ Kairo is a desktop productivity app. It runs as an Electron app wrapping a Bun/E
 | Process | Role | Talks to |
 |---------|------|----------|
 
-| **Electron main** | Window, native menus, settings, AW process lifecycle, DB path management | Server (HTTP for pause/resume), Renderer (IPC) |
+| **Electron main** | Window, native menus, settings, DB path resolution | Renderer (IPC) |
 | **Bun server** | REST API, SQLite queries, activity data collection from ActivityWatch | AW API (HTTP), DB (SQLite) |
-| **Renderer** | React UI, user interactions | Server (HTTP for data), Electron (IPC for settings/AW control) |
+| **Renderer** | React UI, user interactions | Server (HTTP for data/AW control), Electron (IPC for settings) |
 
 The renderer has two communication channels:
 
 - **HTTP → Server**: tasks, subtasks, metrics, activity data, reports
-- **IPC → Electron**: settings, AW connect/disconnect, DB info, app version
+- **IPC → Electron**: settings, DB info, app version
 
 ## Why a Separate Server Process
 
@@ -55,14 +55,12 @@ This started as a web app. The Electron conversion wraps it rather than replacin
 
 ## ActivityWatch Integration
 
-ActivityWatch knowledge is split across the stack:
+ActivityWatch knowledge is split across the server:
 
-| Layer | File | Responsibility |
-|-------|------|----------------|
+| File | Responsibility |
+| ---- | -------------- |
+| `nodeActivityWatch.ts` | Cron-based polling, bucket processing, pause/resume |
+| `activityWatchService.ts` | Analyze time windows, classify activity (focus/prefocus/distraction/idle) |
+| `activityWatchClient.ts` | HTTP client for AW's REST API |
 
-| Electron | `activityWatchManager.js` | Detect, start/stop AW process, health monitoring, connection state |
-| Server | `nodeActivityWatch.ts` | Cron-based polling, bucket processing, pause/resume |
-| Server | `activityWatchService.ts` | Analyze time windows, classify activity (focus/prefocus/distraction/idle) |
-| Server | `activityWatchClient.ts` | HTTP client for AW's REST API |
-
-Coordination: Electron tells the server to pause/resume polling via `POST /api/activity/{pause,resume}` when the user connects/disconnects.
+The client controls polling via `POST /api/activity/{pause,resume}` from the Settings page.

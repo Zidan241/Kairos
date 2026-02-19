@@ -1,5 +1,5 @@
 {
-  "name": "kairos-desktop",
+  "name": "kairos",
   "version": "1.0.0",
   "description": "Personal productivity app for task management, day planning, and focus tracking",
   "author": "Mohamed Ahmed",
@@ -14,13 +14,13 @@
     "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
     "dev:server": "bun run server/index.ts",
     "dev:client": "vite",
-    "dev:electron": "concurrently \"bun run dev:client\" \"cross-env NODE_ENV=development electron .\"",
-    "build": "vite build",
-    "build:server": "bun build server/index.ts --compile --outfile server/kairo-server",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish:electron": "bun run build:server && bun run build && electron-forge publish",
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "vite build",
+    "build:server": "bun build server/index.ts --compile --outfile dist/server",
+    "package": "bun run build && electron-forge package",
+    "make": "bun run build && electron-forge make",
     "start": "electron-forge start",
+    "publish": "bun run build && dotenv -- electron-forge publish",
     "check": "tsc"
   },
   "dependencies": {

@@ -7,8 +7,6 @@ import fs from 'fs';
 import { logger } from './logger.js';
 import { DEFAULT_SERVER_PORT } from '../shared/constants.js';
 
-const __dirname = import.meta.dirname;
-
 class ServerManager {
   constructor(databasePath = null) {
     this.serverProcess = null;
@@ -21,118 +19,101 @@ class ServerManager {
     this.databasePath = databasePath;
     this.intentionalStop = false; // Prevents auto-restart on deliberate shutdown
   }
-  
+
   async findAvailablePort(startPort = DEFAULT_SERVER_PORT) {
     return new Promise((resolve) => {
       const server = net.createServer();
-      
+
       server.listen(startPort, () => {
         const port = server.address().port;
         server.close(() => resolve(port));
       });
-      
+
       server.on('error', () => {
         resolve(this.findAvailablePort(startPort + 1));
       });
     });
   }
-  
+
   async startServer() {
     try {
       // Find available port
       this.serverPort = await this.findAvailablePort(DEFAULT_SERVER_PORT);
       logger.info(`Starting server on port ${this.serverPort}`);
-      
-      const isDev = process.env.NODE_ENV === 'development';
-      
-      // In production, use compiled binary; in dev, use bun with source
-      const compiledServerPath = path.join(__dirname, '../server/kairo-server' + (process.platform === 'win32' ? '.exe' : ''));
-      const sourceServerPath = path.join(__dirname, '../server/index.ts');
-      
-      let command, args;
-      
-      if (!isDev && fs.existsSync(compiledServerPath)) {
-        // Production: run compiled binary
-        logger.info('Using compiled server binary');
-        command = compiledServerPath;
-        args = [];
-      } else {
-        // Development: run with bun
-        if (!fs.existsSync(sourceServerPath)) {
-          throw new Error(`Server file not found: ${sourceServerPath}`);
-        }
-        logger.info('Using bun to run server source');
-        command = 'bun';
-        args = ['run', sourceServerPath];
+
+      // Resolve compiled server binary path
+      const command = path.join(process.resourcesPath, 'server' + (process.platform === 'win32' ? '.exe' : ''));
+
+      if (!fs.existsSync(command)) {
+        throw new Error(`Server binary not found: ${command}`);
       }
-      
-      // Start server process
-      this.serverProcess = spawn(command, args, {
-        cwd: path.join(__dirname, '..'),
-        env: { 
-          ...process.env, 
+
+      this.serverProcess = spawn(command, [], {
+        cwd: process.resourcesPath,
+        env: {
+          ...process.env,
           PORT: this.serverPort.toString(),
-          NODE_ENV: process.env.NODE_ENV || 'production',
-          // Use the database path provided by DatabaseManager
-          DATABASE_PATH: this.databasePath || path.join(__dirname, '../kairo.db')
+          NODE_ENV: 'production',
+          DATABASE_PATH: this.databasePath || path.join(process.resourcesPath, 'kairo.db'),
+          MIGRATIONS_PATH: path.join(process.resourcesPath, 'migrations'),
         },
         stdio: ['pipe', 'pipe', 'pipe']
       });
-      
+
       logger.info('Server process spawned, setting up event handlers');
-      
+
       // Setup process event handlers
       this.setupProcessHandlers();
-      
+
       // Wait for server to be ready
       await this.waitForServerReady();
-      
+
       // Start health monitoring
       this.startHealthMonitoring();
-      
+
       logger.info(`Server successfully started on port ${this.serverPort}`);
       this.restartAttempts = 0; // Reset restart attempts on successful start
-      
+
       return {
         port: this.serverPort,
         status: 'ready',
         pid: this.serverProcess.pid
       };
-      
+
     } catch (error) {
       logger.error('Failed to start server:', error);
       await this.cleanup();
       throw error;
     }
   }
-  
+
   setupProcessHandlers() {
     if (!this.serverProcess) return;
-    
+
     this.serverProcess.stdout.on('data', (data) => {
       const output = data.toString().trim();
       logger.info(`[Server] ${output}`);
-      
+
       // Check for server ready indicators
       if (output.includes('Server running on') || output.includes('listening on')) {
         this.isServerReady = true;
       }
     });
-    
+
     this.serverProcess.stderr.on('data', (data) => {
       const error = data.toString().trim();
       logger.error(`[Server Error] ${error}`);
     });
-    
+
     this.serverProcess.on('close', async (code) => {
       logger.info(`Server process exited with code ${code}`);
       this.isServerReady = false;
-      
+
       if (this.healthCheckInterval) {
         clearInterval(this.healthCheckInterval);
         this.healthCheckInterval = null;
       }
-      
+
       // Attempt restart only if it wasn't intentionally stopped
       if (this.intentionalStop) {
         this.intentionalStop = false;
@@ -141,7 +122,7 @@ class ServerManager {
       if (code !== 0 && this.restartAttempts < this.maxRestartAttempts) {
         logger.warn(`Attempting to restart server (attempt ${this.restartAttempts + 1}/${this.maxRestartAttempts})`);
         this.restartAttempts++;
-        
+
         setTimeout(async () => {
           try {
             await this.startServer();
@@ -157,17 +138,17 @@ class ServerManager {
         );
       }
     });
-    
+
     this.serverProcess.on('error', (error) => {
       logger.error('Server process error:', error);
       this.isServerReady = false;
     });
   }
-  
+
   async waitForServerReady(timeout = this.startupTimeout) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      
+
       const checkServer = async () => {
         try {
           // Try to connect to health endpoint
@@ -180,30 +161,30 @@ class ServerManager {
         } catch (error) {
           // Health check failed, continue waiting
         }
-        
+
         // Check for timeout
         if (Date.now() - startTime > timeout) {
           reject(new Error(`Server startup timeout after ${timeout}ms`));
           return;
         }
-        
+
         // Try again after a short delay
         setTimeout(checkServer, 500);
       };
-      
+
       checkServer();
     });
   }
-  
+
   async healthCheck() {
     return new Promise((resolve, reject) => {
       const request = http.get(`http://localhost:${this.serverPort}/api/health`, (response) => {
         let data = '';
-        
+
         response.on('data', (chunk) => {
           data += chunk;
         });
-        
+
         response.on('end', () => {
           try {
             const result = JSON.parse(data);
@@ -221,7 +202,7 @@ class ServerManager {
           }
         });
       });
-      
+
       request.on('error', (error) => {
         resolve({
           ok: false,
@@ -229,7 +210,7 @@ class ServerManager {
           status: 0
         });
       });
-      
+
       request.setTimeout(5000, () => {
         request.destroy();
         resolve({
@@ -240,7 +221,7 @@ class ServerManager {
       });
     });
   }
-  
+
   startHealthMonitoring() {
     // Check server health every 30 seconds
     this.healthCheckInterval = setInterval(async () => {
@@ -253,24 +234,24 @@ class ServerManager {
       }
     }, 30000);
   }
-  
+
   async stopServer() {
     logger.info('Stopping server...');
-    
+
     // Signal that this is a deliberate stop — suppress auto-restart
     this.intentionalStop = true;
-    
+
     // Clear health monitoring
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
-    
+
     if (!this.serverProcess) {
       logger.info('Server process not running');
       return;
     }
-    
+
     return new Promise((resolve) => {
       const cleanup = () => {
         this.serverProcess = null;
@@ -278,10 +259,10 @@ class ServerManager {
         this.restartAttempts = 0;
         resolve();
       };
-      
+
       // Try graceful shutdown first
       this.serverProcess.kill('SIGTERM');
-      
+
       // Force kill after timeout
       const forceKillTimeout = setTimeout(() => {
         if (this.serverProcess && !this.serverProcess.killed) {
@@ -290,37 +271,18 @@ class ServerManager {
         }
         cleanup();
       }, 5000);
-      
+
       this.serverProcess.on('close', () => {
         clearTimeout(forceKillTimeout);
         cleanup();
       });
     });
   }
-  
+
   async cleanup() {
     await this.stopServer();
   }
-  
-  getServerInfo() {
-    return {
-      port: this.serverPort,
-      isReady: this.isServerReady,
-      isRunning: this.serverProcess !== null && !this.serverProcess.killed,
-      pid: this.serverProcess?.pid,
-      restartAttempts: this.restartAttempts
-    };
-  }
-  
-  async restartServer() {
-    logger.info('Restarting server...');
-    await this.stopServer();
-    
-    // Wait a moment before restart
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    return await this.startServer();
-  }
+
 }
 
 export { ServerManager };

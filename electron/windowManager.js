@@ -2,7 +2,6 @@ import { app, BrowserWindow, screen, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { logger } from './logger.js';
-import { DEV_VITE_URL } from '../shared/constants.js';
 
 const __dirname = import.meta.dirname;
 
@@ -106,18 +105,15 @@ class WindowManager {
   }
   
   setupContentSecurityPolicy() {
-    const isDev = process.env.NODE_ENV === 'development';
-
     // Apply CSP headers to all responses
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       const csp = [
         "default-src 'self'",
-        // unsafe-inline required only for Vite HMR in dev; omit in production
-        isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
+        "script-src 'self'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob:",
-        "connect-src 'self' http://localhost:* ws://localhost:*", // API and HMR websocket
+        "connect-src 'self' http://localhost:*",
       ].join('; ');
       
       callback({
@@ -129,33 +125,13 @@ class WindowManager {
     });
   }
   
-  loadContent(isDevelopment = false) {
+  loadContent() {
     if (!this.mainWindow) return;
     
-    if (isDevelopment) {
-      // Development: load from Vite dev server with retry
-      const viteUrl = DEV_VITE_URL;
-      const loadWithRetry = (attemptsLeft = 10) => {
-        this.mainWindow.loadURL(viteUrl).catch(err => {
-          if (attemptsLeft > 0) {
-            logger.info(`Waiting for Vite dev server... (${attemptsLeft} retries left)`);
-            setTimeout(() => loadWithRetry(attemptsLeft - 1), 1000);
-          } else {
-            logger.error('Failed to connect to Vite dev server:', err);
-            this.loadFallbackContent();
-          }
-        });
-      };
-      loadWithRetry();
-      // Open DevTools in development
-      this.mainWindow.webContents.openDevTools();
-    } else {
-      // Production: load built files
-      this.mainWindow.loadFile(path.join(__dirname, '../dist/public/index.html')).catch(err => {
-        logger.error('Failed to load built files:', err);
-        this.loadFallbackContent();
-      });
-    }
+    this.mainWindow.loadFile(path.join(__dirname, '../dist/client/index.html')).catch(err => {
+      logger.error('Failed to load built files:', err);
+      this.loadFallbackContent();
+    });
   }
   
   loadFallbackContent() {
@@ -166,7 +142,7 @@ class WindowManager {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Kairos Desktop</title>
+        <title>Kairos</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
           .container { max-width: 600px; margin: 0 auto; }
@@ -176,10 +152,10 @@ class WindowManager {
       </head>
       <body>
         <div class="container">
-          <h1>Kairos Desktop</h1>
+          <h1>Kairos</h1>
           <div class="info">Server could not be reached</div>
           <div class="error">Frontend not available</div>
-          <p>Please check that the Vite development server is running</p>
+          <p>Please restart the application.</p>
           <button onclick="location.reload()">Retry</button>
         </div>
       </body>

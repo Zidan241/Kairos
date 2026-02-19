@@ -2,10 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { CheckCircle2, Circle, ArrowRight, Download, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
-import { useElectron, isElectron } from "@/hooks/useElectron";
 import { activityApi } from "@/lib/api";
 
 interface OnboardingProps {
@@ -15,20 +12,15 @@ interface OnboardingProps {
 type Step = "welcome" | "activitywatch" | "ready";
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
-  const electron = useElectron();
-  const isElectronApp = isElectron();
   const [currentStep, setCurrentStep] = useState<Step>("welcome");
   const [awStatus, setAwStatus] = useState<{ available: boolean; running: boolean } | null>(null);
   const [checking, setChecking] = useState(false);
-  const [awPath, setAwPath] = useState('');
 
   // Check ActivityWatch status
   const checkActivityWatch = async () => {
     setChecking(true);
     try {
-      const status = electron
-        ? await electron.getActivityWatchStatus()
-        : await activityApi.getStatus();
+      const status = await activityApi.getStatus();
       setAwStatus(status);
     } catch (e) {
       console.error("Failed to check ActivityWatch:", e);
@@ -40,11 +32,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   useEffect(() => {
     if (currentStep === "activitywatch") {
       checkActivityWatch();
-      if (electron) {
-        electron.getSettings().then(s => setAwPath(s.activityWatchPath || '')).catch(() => {});
-      }
     }
-  }, [currentStep, electron]);
+  }, [currentStep]);
 
   const steps: { key: Step; label: string }[] = [
     { key: "welcome", label: "Welcome" },
@@ -231,27 +220,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                       <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
                       Check Again
                     </Button>
-
-                    {/* Custom executable path - Electron only */}
-                    {isElectronApp && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="onboarding-aw-path" className="text-sm">Custom Executable Path</Label>
-                      <p className="text-xs text-muted-foreground">
-                        If ActivityWatch is installed in a non-standard location, enter the path to aw-qt here.
-                      </p>
-                      <Input
-                        id="onboarding-aw-path"
-                        placeholder="Leave empty to auto-detect"
-                        value={awPath}
-                        onChange={(e) => setAwPath(e.target.value)}
-                        onBlur={async () => {
-                          if (electron) {
-                            await electron.setSettings({ activityWatchPath: awPath.trim() });
-                          }
-                        }}
-                      />
-                    </div>
-                    )}
                   </div>
                 )}
 

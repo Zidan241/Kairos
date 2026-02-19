@@ -28,7 +28,7 @@ export function SubtaskModal({
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    estimatedMinutes: 60,
+    estimatedMinutes: "60" as string,
   });
 
   useEffect(() => {
@@ -38,13 +38,13 @@ export function SubtaskModal({
       setFormData({
         title: existingSubtask.title,
         description: existingSubtask.description || "",
-        estimatedMinutes: existingSubtask.estimatedMinutes || 60,
+        estimatedMinutes: String(existingSubtask.estimatedMinutes || 60),
       });
     } else {
       setFormData({
         title: "",
         description: "",
-        estimatedMinutes: 60,
+        estimatedMinutes: "60",
       });
     }
   }, [open, existingSubtask]);
@@ -56,7 +56,7 @@ export function SubtaskModal({
       const data = {
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-        estimatedMinutes: formData.estimatedMinutes,
+        estimatedMinutes: parseInt(formData.estimatedMinutes) || 60,
       };
 
       if (mode === 'create') {
@@ -112,7 +112,7 @@ export function SubtaskModal({
               min="5"
               max="480"
               value={formData.estimatedMinutes}
-              onChange={(e) => setFormData(prev => ({ ...prev, estimatedMinutes: parseInt(e.target.value) || 60 }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, estimatedMinutes: e.target.value }))}
               placeholder="60"
             />
           </div>
