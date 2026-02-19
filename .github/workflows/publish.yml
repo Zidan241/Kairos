@@ -36,6 +36,6 @@ jobs:
         run: bun run build:server
 
       - name: Publish
-        run: electron-forge publish
+        run: npx electron-forge publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
