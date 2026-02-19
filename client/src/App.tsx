@@ -89,7 +89,7 @@ export default function App() {
                   <ThemeToggle />
                 </div>
               </header>
-              <main className="flex-1 overflow-auto">
+              <main className="flex-1 overflow-auto scrollbar-clean">
                 <Router />
               </main>
             </div>
