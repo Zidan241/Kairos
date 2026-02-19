@@ -109,7 +109,7 @@ export default function Settings() {
   }, [electron]);
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-6 space-y-6 w-full">
       <h1 className="text-2xl font-bold">Settings</h1>
 
       {/* ActivityWatch Integration */}
@@ -205,31 +205,7 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
-
-      {/* Appearance */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Palette className="h-5 w-5" />
-            <CardTitle>Appearance</CardTitle>
-          </div>
-          <CardDescription>
-            Customize the look and feel of the app
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Theme</Label>
-              <p className="text-sm text-muted-foreground">
-                Switch between light and dark mode
-              </p>
-            </div>
-            <ThemeToggle />
-          </div>
-        </CardContent>
-      </Card>
-
+      
       {/* Database */}
       {dbInfo && (
         <Card>

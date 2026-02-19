@@ -1,4 +1,4 @@
-import { Home, Settings, Target, TrendingUp } from "lucide-react";
+import { CircleDot, SlidersHorizontal, LayoutList, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import {
   Sidebar,
@@ -13,24 +13,24 @@ import {
 
 const menuItems = [
   {
-    title: "Dashboard",
+    title: "Focus",
     url: "/",
-    icon: Home,
+    icon: CircleDot,
   },
   {
-    title: "Planning",
+    title: "Plan",
     url: "/planning",
-    icon: Target,
+    icon: LayoutList,
   },
   {
-    title: "Reports",
+    title: "Reflect",
     url: "/reports",
-    icon: TrendingUp,
+    icon: Sparkles,
   },
   {
     title: "Settings",
     url: "/settings",
-    icon: Settings,
+    icon: SlidersHorizontal,
   },
 ];
 

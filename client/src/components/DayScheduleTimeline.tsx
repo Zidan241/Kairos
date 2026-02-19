@@ -1,31 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, GripVertical, X, Calendar } from "lucide-react";
-import { useState } from "react";
+import { Clock, GripVertical, X } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useScheduledSubtasks, useUpdateSubtask } from "@/hooks/useTasks";
 import { dateUtils } from "@shared/utils";
-
-// Quick calendar event type
-interface CalendarEvent {
-  id: string;
-  title: string;
-  startTime: number; // minutes from midnight
-  duration: number;  // duration in minutes
-  source: string;
-}
 
 interface DayScheduleTimelineProps {
   date?: string; // YYYY-MM-DD format, defaults to today
   onTaskScheduled?: (task: { id: string; title: string; estimatedTime: number; startTime: number }) => void;
-  startHour?: number; // Default 6 AM
-  endHour?: number;   // Default 10 PM
+  startHour?: number;
+  endHour?: number;
 }
 
 export default function DayScheduleTimeline({ 
   date = dateUtils.getTodayDate(),
   onTaskScheduled,
-  startHour = 6,  // Default: 6 AM
-  endHour = 22    // Default: 10 PM
+  startHour = 0,
+  endHour = 24
 }: DayScheduleTimelineProps) {
   // Fetch scheduled subtasks for the date
   const { data: allScheduledSubtasks = [], isLoading } = useScheduledSubtasks(date);
@@ -33,35 +24,58 @@ export default function DayScheduleTimeline({
   // Filter out subtasks that don't have a scheduledStartTime
   const scheduledSubtasks = allScheduledSubtasks.filter(subtask => subtask.scheduledStartTime !== null);
 
-  // Mock calendar events - replace with real API later
-  const calendarEvents: CalendarEvent[] = [
-    {
-      id: 'cal-1',
-      title: 'Team Standup',
-      startTime: 9 * 60, // 9:00 AM
-      duration: 45,
-      source: 'Google Calendar'
-    },
-    {
-      id: 'cal-2', 
-      title: 'Client Meeting',
-      startTime: 14 * 60, // 2:00 PM
-      duration: 60,
-      source: 'Outlook'
-    },
-    {
-      id: 'cal-3',
-      title: 'Lunch Break',
-      startTime: 12 * 60, // 12:00 PM  
-      duration: 60,
-      source: 'Personal'
-    }
-  ];
-
   const scheduleTaskMutation = useUpdateSubtask();
 
   const [draggedTask, setDraggedTask] = useState<number | null>(null);
   const [draggedFromOutside, setDraggedFromOutside] = useState<boolean>(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const currentTimeRef = useRef<HTMLDivElement>(null);
+  const hasScrolledRef = useRef(false);
+
+  // Current time as minutes from midnight
+  const [currentTimeMinutes, setCurrentTimeMinutes] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Scroll to current time on first render
+  const scrollToCurrentTime = useCallback(() => {
+    if (hasScrolledRef.current) return;
+    if (scrollContainerRef.current && currentTimeRef.current) {
+      const container = scrollContainerRef.current;
+      const timeLine = currentTimeRef.current;
+      const containerHeight = container.clientHeight;
+      const timeLineOffset = timeLine.offsetTop;
+      container.scrollTop = timeLineOffset - containerHeight / 3;
+      hasScrolledRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    // Small delay to ensure DOM is rendered
+    const timeout = setTimeout(scrollToCurrentTime, 100);
+    return () => clearTimeout(timeout);
+  }, [scrollToCurrentTime, isLoading]);
+
+  // Current time position as percentage
+  const currentTimePosition = (() => {
+    const timelineStart = startHour * 60;
+    const timelineEnd = endHour * 60;
+    const timelineHeight = timelineEnd - timelineStart;
+    const relative = Math.max(0, Math.min(currentTimeMinutes - timelineStart, timelineHeight));
+    return (relative / timelineHeight) * 100;
+  })();
+
+  const isCurrentTimeVisible = currentTimeMinutes >= startHour * 60 && currentTimeMinutes <= endHour * 60;
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -117,19 +131,6 @@ export default function DayScheduleTimeline({
     // Calculate height as percentage - use estimatedMinutes for duration
     const duration = subtask.estimatedMinutes || 60;
     const height = (duration / timelineHeight) * 100;
-    
-    return { top: `${top}%`, height: `${height}%` };
-  };
-
-  // Calculate position for calendar events (same logic as tasks)
-  const getEventPosition = (event: CalendarEvent) => {
-    const timelineStart = startHour * 60;
-    const timelineEnd = endHour * 60; 
-    const timelineHeight = timelineEnd - timelineStart;
-    
-    const relativeStart = Math.max(0, event.startTime - timelineStart);
-    const top = (relativeStart / timelineHeight) * 100;
-    const height = (event.duration / timelineHeight) * 100;
     
     return { top: `${top}%`, height: `${height}%` };
   };
@@ -245,7 +246,7 @@ export default function DayScheduleTimeline({
         </p>
       </CardHeader>
       <CardContent className="p-0 flex-1 overflow-hidden">
-        <div className="relative h-full overflow-y-auto overflow-x-hidden scrollbar-clean">
+        <div ref={scrollContainerRef} className="relative h-full overflow-y-auto overflow-x-hidden scrollbar-clean">
           {/* Timeline container - scrolls as one unit */}
           <div className="flex">
             {/* Time labels - show only on hour marks */}
@@ -287,6 +288,17 @@ export default function DayScheduleTimeline({
                 </div>
               ))}
               
+              {/* Current time indicator */}
+              {isCurrentTimeVisible && (
+                <div
+                  ref={currentTimeRef}
+                  className="absolute left-0 right-0 z-30 pointer-events-none"
+                  style={{ top: `${currentTimePosition}%` }}
+                >
+                  <div className="flex-1 h-[2px] bg-blue-500 shadow-sm" />
+                </div>
+              )}
+
               {/* Scheduled subtasks */}
               {scheduledSubtasks.map((subtask) => {
                 const position = getTaskPosition(subtask);
@@ -337,38 +349,7 @@ export default function DayScheduleTimeline({
                 );
               })}
               
-              {/* Calendar events - read-only/blocked */}
-              {calendarEvents.map((event) => {
-                const position = getEventPosition(event);
-                
-                return (
-                  <div
-                    key={event.id}
-                    className="absolute left-1 right-1 bg-background border border-border rounded-md p-2 shadow-sm transition-all duration-200 z-5 overflow-hidden border-l-4 border-l-muted-foreground opacity-90"
-                    style={position}
-                    data-testid={`calendar-event-${event.id}`}
-                    title="Calendar event - read only"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Calendar className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium mb-1 text-foreground/80">
-                          {event.title}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="h-2.5 w-2.5" />
-                          <span>
-                            {formatTime(event.startTime)} - {formatTime(event.startTime + event.duration)}
-                          </span>
-                          <Badge variant="outline" className="text-xs border-muted text-muted-foreground">
-                            {event.source}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+
             </div>
           </div>
         </div>

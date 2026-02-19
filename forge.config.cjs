@@ -1,9 +1,13 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+
+const isWindows = process.platform === 'win32';
+const serverBinary = isWindows ? './dist/server.exe' : './dist/server';
+
 module.exports = {
   packagerConfig: {
     asar: true,
-    extraResource: ['./dist/server', './server/migrations'], // Server binary + migration files in Resources/
+    extraResource: [serverBinary, './server/migrations'], // Server binary + migration files in Resources/
     icon: './assets/icon',      // .icns for macOS, .ico for Windows (omit extension)
     // osxSign: {},
     ignore: (filePath) => {
