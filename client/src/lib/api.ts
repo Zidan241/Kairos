@@ -95,4 +95,24 @@ export const activityApi = {
     const res = await apiRequest('GET', '/api/activity/status');
     return res.json();
   },
+  pause: async (): Promise<void> => {
+    await apiRequest('POST', '/api/activity/pause');
+  },
+  resume: async (): Promise<void> => {
+    await apiRequest('POST', '/api/activity/resume');
+  },
+};
+
+// -------------------------
+// Database API
+// -------------------------
+export const databaseApi = {
+  getInfo: async (): Promise<{ path: string; exists: boolean; size: number; lastModified: string | null; lastBackup: string | null }> => {
+    const res = await apiRequest('GET', '/api/database/info');
+    return res.json();
+  },
+  backup: async (): Promise<{ path: string }> => {
+    const res = await apiRequest('POST', '/api/database/backup');
+    return res.json();
+  },
 };

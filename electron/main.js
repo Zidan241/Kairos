@@ -1,52 +1,25 @@
-import { app, dialog, ipcMain } from 'electron';
-import path from 'path';
+import { app, dialog, ipcMain, shell } from 'electron';
 import { WindowManager } from './windowManager.js';
 import { ServerManager } from './serverManager.js';
 import { DatabaseManager } from './databaseManager.js';
-import { ActivityWatchManager } from './activityWatchManager.js';
 import { MenuManager } from './menuManager.js';
 import { settingsManager } from './settingsManager.js';
 import { logger } from './logger.js';
-import updateElectronApp from 'update-electron-app';
-
-const __dirname = import.meta.dirname;
 
 // Keep references to main components
 let windowManager;
 let serverManager;
 let databaseManager;
-let activityWatchManager;
 let menuManager;
-
-// Enable live reload for development (will be loaded after app is ready)
-let enableLiveReload = false;
-if (process.env.NODE_ENV === 'development') {
-  enableLiveReload = true;
-}
 
 // App event handlers
 app.whenReady().then(async () => {
   try {
     logger.info('App startup initiated');
     
-    // Setup live reload for development
-    if (enableLiveReload) {
-      try {
-        const electronReload = await import('electron-reload');
-        electronReload.default(__dirname, {
-          electron: path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
-          hardResetMethod: 'exit'
-        });
-        logger.info('Live reload enabled for development');
-      } catch (error) {
-        logger.warn('Failed to load electron-reload:', error.message);
-      }
-    }
-    
     // Initialize managers
     windowManager = new WindowManager();
     databaseManager = new DatabaseManager();
-    activityWatchManager = new ActivityWatchManager();
     logger.info('Core managers initialized');
     
     // Initialize database bundle
@@ -61,44 +34,18 @@ app.whenReady().then(async () => {
     const serverInfo = await serverManager.startServer();
     logger.info('Server started:', serverInfo);
     
-    // Give ActivityWatch manager access to server port for pause/resume
-    activityWatchManager.setServerPort(serverInfo.port);
-
     // Expose server port to renderer
     ipcMain.handle('get-server-port', () => serverInfo.port);
-
-    // Check ActivityWatch availability (non-blocking)
-    await activityWatchManager.detectActivityWatch();
-    
-    // If setting is enabled, AW is installed but not running, and user didn't explicitly disconnect — auto-start
-    if (
-      settingsManager.get('manageActivityWatch') &&
-      !settingsManager.get('activityWatchDisconnectedByUser') &&
-      activityWatchManager.isAvailable &&
-      !activityWatchManager.isRunning
-    ) {
-      try {
-        await activityWatchManager.connect();
-        logger.info('ActivityWatch auto-started (managed by Kairos)');
-      } catch (error) {
-        logger.warn('Failed to auto-start ActivityWatch:', error);
-      }
-    }
     
     // Create main window
-    const mainWindow = windowManager.createWindow();
+    windowManager.createWindow();
     logger.info('Main window created');
     
-    // Load content based on environment
-    const isDev = process.env.NODE_ENV === 'development';
-    logger.info('Loading content in development mode:', isDev);
-    windowManager.loadContent(isDev);
+    // Load built frontend
+    windowManager.loadContent();
     
-    // Setup auto-updater (only in production)
-    if (!isDev) {
-      updateElectronApp({ logger });
-      logger.info('Auto-updater enabled via update-electron-app');
-    }
+    // Check for updates (non-blocking)
+    checkForUpdates().catch(err => logger.warn('Update check failed:', err.message));
     
     // Setup application menu
     menuManager = new MenuManager(windowManager);
@@ -133,7 +80,7 @@ app.on('activate', () => {
       windowManager = new WindowManager();
     }
     windowManager.createWindow();
-    windowManager.loadContent(process.env.NODE_ENV === 'development');
+    windowManager.loadContent();
   }
 });
 
@@ -153,25 +100,10 @@ app.on('before-quit', (event) => {
       logger.info('Window state saved');
     }
     
-    // Clean up ActivityWatch (stop process if managed, stop monitoring otherwise)
-    if (activityWatchManager) {
-      try {
-        await activityWatchManager.cleanup();
-        logger.info('ActivityWatch cleaned up successfully');
-      } catch (error) {
-        logger.error('Error cleaning up ActivityWatch:', error);
-      }
-    }
-    
     // Gracefully shutdown local server
     if (serverManager) {
       await serverManager.stopServer();
       logger.info('Server stopped');
-    }
-    
-    // Cleanup old database backups
-    if (databaseManager) {
-      await databaseManager.cleanupOldBackups();
     }
     
     // All cleanup done — quit for real
@@ -182,55 +114,6 @@ app.on('before-quit', (event) => {
     logger.error('Cleanup error, forcing quit:', err);
     app.exit(1);
   });
-});
-
-// Setup IPC handlers for database management
-ipcMain.handle('db-get-info', async () => {
-  if (databaseManager) {
-    return await databaseManager.getDatabaseInfo();
-  }
-  return { error: 'Database manager not initialized' };
-});
-
-ipcMain.handle('db-backup', async () => {
-  if (databaseManager) {
-    try {
-      return await databaseManager.backupDatabase();
-    } catch (error) {
-      logger.error('Database backup failed:', error);
-      throw error;
-    }
-  }
-  return { error: 'Database manager not initialized' };
-});
-
-// Setup IPC handlers for ActivityWatch management
-ipcMain.handle('aw-get-status', () => {
-  if (!activityWatchManager) return { available: false, running: false };
-  return {
-    available: activityWatchManager.isAvailable || activityWatchManager.isRunning,
-    running: activityWatchManager.isRunning,
-  };
-});
-
-ipcMain.handle('aw-start', async () => {
-  if (!activityWatchManager) return;
-  try {
-    await activityWatchManager.connect();
-  } catch (error) {
-    logger.error('Failed to connect to ActivityWatch:', error);
-    throw error;
-  }
-});
-
-ipcMain.handle('aw-stop', async () => {
-  if (!activityWatchManager) return;
-  try {
-    await activityWatchManager.disconnect();
-  } catch (error) {
-    logger.error('Failed to disconnect from ActivityWatch:', error);
-    throw error;
-  }
 });
 
 // Setup IPC handlers for app settings
@@ -246,3 +129,28 @@ ipcMain.handle('settings-set', (_event, partial) => {
 ipcMain.handle('app-get-version', () => {
   return app.getVersion();
 });
+
+// Manual update checker — works without code signing
+async function checkForUpdates() {
+  const response = await fetch('https://api.github.com/repos/Zidan241/Kairos/releases/latest');
+  if (!response.ok) return;
+
+  const release = await response.json();
+  const latest = release.tag_name.replace(/^v/, '');
+  const current = app.getVersion();
+
+  if (latest === current) return;
+
+  const { response: button } = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Update Available',
+    message: `Kairos v${latest} is available (you have v${current}).`,
+    buttons: ['Download', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+
+  if (button === 0) {
+    shell.openExternal(release.html_url);
+  }
+}

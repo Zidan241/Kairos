@@ -13,11 +13,8 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-// Dev server logic moved to vite-dev.ts to keep production bundle slim.
-
 export function serveStatic(app: Express) {
-  // In production, client assets are built into ../dist/public relative to this server directory
-  const distPath = path.resolve(import.meta.dirname, "..", "..", "dist", "public");
+  const distPath = path.resolve(import.meta.dirname, "..", "..", "dist", "client");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(

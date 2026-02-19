@@ -7,21 +7,10 @@ import path from 'path';
 import fs from 'fs';
 import { logger } from './logger.js';
 
-import { DEFAULT_ACTIVITY_WATCH_URL } from '../shared/constants.js';
-
 const SETTINGS_FILE = 'settings.json';
 
 /** Default values for all app settings */
-const DEFAULTS = {
-  /** Start/stop ActivityWatch together with Kairos */
-  manageActivityWatch: false,
-  /** Custom path to the ActivityWatch executable (empty = auto-detect) */
-  activityWatchPath: '',
-  /** ActivityWatch server URL */
-  activityWatchUrl: DEFAULT_ACTIVITY_WATCH_URL,
-  /** Whether the user explicitly disconnected ActivityWatch */
-  activityWatchDisconnectedByUser: false,
-};
+const DEFAULTS = {};
 
 /** @typedef {typeof DEFAULTS} AppSettings */
 

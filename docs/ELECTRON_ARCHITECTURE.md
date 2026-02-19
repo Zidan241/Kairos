@@ -6,7 +6,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    Electron Main Process                     │
 │  WindowManager · ServerManager · DatabaseManager            │
-│  MenuManager · SettingsManager · ActivityWatchManager        │
+│  MenuManager · SettingsManager                              │
 └────────────────────────┬────────────────────────────────────┘
                          │ IPC (preload.js)
 ┌────────────────────────▼────────────────────────────────────┐
@@ -16,10 +16,10 @@
 
 ## Startup Flow
 
-1. Initialize managers (Window, Database, ActivityWatch)
+1. Initialize managers (Window, Database)
 2. Start Bun server → health check → get port
-3. Create window → load `localhost:PORT` (prod) or Vite dev server (dev)
-4. Enable auto-updater (`updateElectronApp()`, production only)
+3. Create window → load `dist/client/index.html` via `file://`
+4. Check for updates (via GitHub API)
 5. Build native menu
 
 ## Settings
@@ -38,11 +38,10 @@ Stored as JSON in `app.getPath('userData')/settings.json`. All keys are automati
 Uses Electron Forge with Squirrel.Windows. Output in `out/`.
 
 ```bash
-bun run dev:electron     # Dev: Vite + Electron
 bun run make             # Package + create installer
-bun run publish:electron # Build + publish to GitHub Releases
+bun run publish          # Build + publish to GitHub Releases
 ```
 
-## Auto-Updates
+## Update Checking
 
-One-liner `updateElectronApp()` in `main.js` — checks GitHub Releases via `update.electronjs.org`. Automatic, no UI needed.
+Manual check via GitHub API (`/repos/Zidan241/Kairos/releases/latest`) on startup. Compares latest tag against `app.getVersion()`. Prompts user to download if a newer version is available.

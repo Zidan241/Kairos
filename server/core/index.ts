@@ -1,7 +1,7 @@
 import express, { type Request, Response } from "express";
 import cors from "cors";
 import { registerRoutes } from "../api/routes";
-import { serveStatic, log } from "../dev/vite";
+import { serveStatic, log } from "./static";
 import { setupLoggingMiddleware, setupErrorHandler } from "./middleware";
 import "../services/activity/nodeActivityWatch"; // Start ActivityWatch service
 import { DEFAULT_SERVER_PORT } from "../../shared/constants.js";
@@ -27,11 +27,16 @@ app.use(setupLoggingMiddleware());
     res.status(404).json({ error: "API endpoint not found" });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    const { setupVite } = await import("../dev/vite-dev");
+  // Static file serving / dev server setup
+  // - Compiled binary (Electron): skip — Electron loads the UI directly
+  // - Development: setup Vite dev server for HMR
+  // - Production from source: serve built client files
+  const isCompiled = import.meta.dirname?.startsWith('/$bunfs');
+  if (isCompiled) {
+    // No-op: Electron's BrowserWindow loads the client
+  } else if (app.get("env") === "development") {
+    const devModule = "../dev/vite-dev";
+    const { setupVite } = await import(devModule);
     await setupVite(app, server);
   } else {
     serveStatic(app);

@@ -1,9 +1,24 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
-
 module.exports = {
   packagerConfig: {
     asar: true,
+    extraResource: ['./dist/server', './server/migrations'], // Server binary + migration files in Resources/
+    icon: './assets/icon',      // .icns for macOS, .ico for Windows (omit extension)
+    // osxSign: {},
+    ignore: (filePath) => {
+      if (!filePath) return false;
+
+      const included = [
+        /^\/electron(\/|$)/,
+        /^\/dist(\/|$)/,
+        /^\/shared(\/|$)/,
+        /^\/package\.json$/,
+        /^\/node_modules(\/|$)/,
+      ];
+
+      return !included.some((re) => re.test(filePath));
+    },
   },
   rebuildConfig: {},
   makers: [
@@ -29,8 +44,21 @@ module.exports = {
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
+      [FuseV1Options.OnlyLoadAppFromAsar]: false,
     }),
   ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: {
+          owner: 'Zidan241',
+          name: 'Kairos'
+        },
+        prerelease: false,
+        draft: true
+      }
+    }
+  ]
 };

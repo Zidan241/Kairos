@@ -4,6 +4,9 @@ import { createServer, type Server } from "http";
 import { storage } from "../services/storage";
 import { metricsService } from "../services/metrics";
 import { activityWatchService } from "../services/activity/nodeActivityWatch";
+import { dbPath, sqlite } from "../core/database";
+import fs from "fs";
+import path from "path";
 import { 
   insertTaskSchema, insertSubtaskSchema
 } from "@shared/schema";
@@ -154,6 +157,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.get("/activity/task-transition", asyncHandler(async (req: any, res: any) => {
     const isTransition = await metricsService.checkTaskTransition();
     res.json({ isTaskTransition: isTransition });
+  }));
+
+  // -------------------------
+  // Database Management
+  // -------------------------
+  apiRouter.get("/database/info", asyncHandler(async (_req: any, res: any) => {
+    const backupDir = path.join(path.dirname(dbPath), "backups");
+    let lastBackup: string | null = null;
+
+    try {
+      const files = fs.readdirSync(backupDir)
+        .filter((f: string) => f.startsWith("kairo-backup-") && f.endsWith(".db"));
+      if (files.length > 0) {
+        // Filenames are timestamped — sort descending to get most recent
+        files.sort().reverse();
+        const stat = fs.statSync(path.join(backupDir, files[0]));
+        lastBackup = stat.mtime.toISOString();
+      }
+    } catch {
+      // No backups directory yet
+    }
+
+    try {
+      const stats = fs.statSync(dbPath);
+      res.json({
+        path: dbPath,
+        exists: true,
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+        lastBackup,
+      });
+    } catch {
+      res.json({ path: dbPath, exists: false, size: 0, lastModified: null, lastBackup });
+    }
+  }));
+
+  apiRouter.post("/database/backup", asyncHandler(async (_req: any, res: any) => {
+    const backupDir = path.join(path.dirname(dbPath), "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupPath = path.join(backupDir, `kairo-backup-${timestamp}.db`);
+
+    // Use SQLite's serialize() for a safe snapshot (no corruption from concurrent writes)
+    const snapshot = sqlite.serialize();
+    fs.writeFileSync(backupPath, snapshot);
+
+    res.json({ path: backupPath });
   }));
 
   // Mount the API router
