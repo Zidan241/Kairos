@@ -14,7 +14,7 @@ export default function Settings() {
   const { toast } = useToast();
 
   const [activityWatchConnected, setActivityWatchConnected] = useState(false);
-  const [activityWatchInstalled, setActivityWatchInstalled] = useState<boolean | null>(null);
+  const [activityWatchPaused, setActivityWatchPaused] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [dbInfo, setDbInfo] = useState<{ path: string; size: number; lastBackup: string | null } | null>(null);
@@ -24,8 +24,8 @@ export default function Settings() {
   const refreshStatus = async () => {
     try {
       const status = await activityApi.getStatus();
-      setActivityWatchInstalled(status.available);
-      setActivityWatchConnected(status.running);
+      setActivityWatchPaused(status.paused);
+      setActivityWatchConnected(status.running && !status.paused);
       setLastChecked(new Date());
       return status;
     } catch {
@@ -86,7 +86,7 @@ export default function Settings() {
     setIsRechecking(true);
     try {
       const status = await refreshStatus();
-      if (status?.available) {
+      if (status?.running) {
         toast({ title: "ActivityWatch Detected", description: "ActivityWatch installation found." });
       } else {
         toast({ title: "Not Found", description: "ActivityWatch was not detected. Please install it first.", variant: "destructive" });
@@ -124,8 +124,8 @@ export default function Settings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Not installed - show install instructions */}
-          {activityWatchInstalled === false && (
+          {/* Not running and not paused - show install instructions */}
+          {lastChecked !== null && !activityWatchConnected && !activityWatchPaused && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Badge variant="outline">Not Installed</Badge>
@@ -164,22 +164,22 @@ export default function Settings() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                {isRechecking ? "Checking..." : "Recheck Installation"}
+                {isRechecking ? "Checking..." : "Check Again"}
               </Button>
             </div>
           )}
 
-          {/* Installed - show connection controls */}
-          {activityWatchInstalled !== false && (
+          {/* Running or paused - show connection controls */}
+          {(lastChecked === null || activityWatchConnected || activityWatchPaused) && (
             <>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Connection Status</Label>
                   <div className="flex items-center gap-2">
                     <Badge variant={activityWatchConnected ? "default" : "secondary"}>
-                      {activityWatchConnected ? "Connected" : "Disconnected"}
+                      {activityWatchConnected ? "Connected" : activityWatchPaused ? "Paused" : "Disconnected"}
                     </Badge>
-                    {activityWatchInstalled === null && (
+                    {lastChecked === null && !activityWatchPaused && (
                       <span className="text-sm text-muted-foreground">
                         Checking...
                       </span>
@@ -188,11 +188,11 @@ export default function Settings() {
                 </div>
                 <Button
                   variant={activityWatchConnected ? "outline" : "default"}
-                  disabled={activityWatchInstalled === null || isToggling}
+                  disabled={lastChecked === null || isToggling}
                   onClick={handleToggleConnection}
                   data-testid="button-activitywatch-toggle"
                 >
-                  {activityWatchConnected ? "Disconnect" : "Connect"}
+                  {activityWatchConnected ? "Disconnect" : activityWatchPaused ? "Reconnect" : "Connect"}
                 </Button>
               </div>
 

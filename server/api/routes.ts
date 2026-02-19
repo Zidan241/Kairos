@@ -141,7 +141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.get("/activity/status", asyncHandler(async (req: any, res: any) => {
     const running = await activityWatchService.isActivityWatchRunning();
-    res.json({ available: running, running, paused: activityWatchService.isPaused() });
+    res.json({ running, paused: activityWatchService.isPaused() });
   }));
 
   apiRouter.post("/activity/pause", asyncHandler(async (_req: any, res: any) => {

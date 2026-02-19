@@ -91,7 +91,7 @@ export const metricsApi = {
 // ActivityWatch API
 // -------------------------
 export const activityApi = {
-  getStatus: async (): Promise<{ available: boolean; running: boolean }> => {
+  getStatus: async (): Promise<{ running: boolean; paused: boolean }> => {
     const res = await apiRequest('GET', '/api/activity/status');
     return res.json();
   },
