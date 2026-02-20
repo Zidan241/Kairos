@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Application info
   getAppVersion: () => ipcRenderer.invoke('app-get-version'),
   getServerPort: () => ipcRenderer.invoke('get-server-port'),
+  getLogPath: () => ipcRenderer.invoke('get-log-path'),
 
   // App settings
   getSettings: () => ipcRenderer.invoke('settings-get'),

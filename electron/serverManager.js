@@ -48,14 +48,15 @@ class ServerManager {
         throw new Error(`Server binary not found: ${command}`);
       }
 
-      this.serverProcess = spawn(command, [], {
+      this.serverProcess = spawn(command, [
+        '--db', this.databasePath || path.join(process.resourcesPath, 'kairo.db'),
+        '--migrations', path.join(process.resourcesPath, 'migrations'),
+        '--port', this.serverPort.toString(),
+      ], {
         cwd: process.resourcesPath,
         env: {
           ...process.env,
-          PORT: this.serverPort.toString(),
           NODE_ENV: 'production',
-          DATABASE_PATH: this.databasePath || path.join(process.resourcesPath, 'kairo.db'),
-          MIGRATIONS_PATH: path.join(process.resourcesPath, 'migrations'),
         },
         stdio: ['pipe', 'pipe', 'pipe']
       });

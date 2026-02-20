@@ -5,6 +5,7 @@ import { serveStatic, log } from "./static";
 import { setupLoggingMiddleware, setupErrorHandler } from "./middleware";
 import "../services/activity/nodeActivityWatch"; // Start ActivityWatch service
 import { DEFAULT_SERVER_PORT } from "../../shared/constants.js";
+import { getArg } from "../utils/args";
 
 const app = express();
 app.use(express.json());
@@ -42,7 +43,7 @@ app.use(setupLoggingMiddleware());
     serveStatic(app);
   }
 
-  const port = parseInt(process.env.PORT || String(DEFAULT_SERVER_PORT), 10);
+  const port = parseInt(getArg('--port') || String(DEFAULT_SERVER_PORT), 10);
   server.listen({
     port,
     host: "127.0.0.1",

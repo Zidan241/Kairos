@@ -9,6 +9,7 @@ export interface ElectronAPI {
   // Application info
   getAppVersion: () => Promise<string>;
   getServerPort: () => Promise<number>;
+  getLogPath: () => Promise<string>;
   
   // App settings
   getSettings: () => Promise<AppSettings>;

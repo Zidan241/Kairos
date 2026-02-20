@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ActivitySquare, Palette, Info, Database, RefreshCw, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import ThemeToggle from "@/components/ThemeToggle";
 import { useElectron, isElectron } from "@/hooks/useElectron";
 import { activityApi, databaseApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -17,9 +16,12 @@ export default function Settings() {
   const [activityWatchPaused, setActivityWatchPaused] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [logPath, setLogPath] = useState<string | null>(null);
   const [dbInfo, setDbInfo] = useState<{ path: string; size: number; lastBackup: string | null } | null>(null);
   const [isToggling, setIsToggling] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
+
+  const statusLoaded = lastChecked !== null;
 
   const refreshStatus = async () => {
     try {
@@ -106,6 +108,7 @@ export default function Settings() {
     // Electron-only data
     if (!electron) return;
     electron.getAppVersion().then(setAppVersion).catch(() => { });
+    electron.getLogPath().then(setLogPath).catch(() => { });
   }, [electron]);
 
   return (
@@ -125,7 +128,7 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Not running and not paused - show install instructions */}
-          {lastChecked !== null && !activityWatchConnected && !activityWatchPaused && (
+          {statusLoaded && !activityWatchConnected && !activityWatchPaused && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Badge variant="outline">Not Installed</Badge>
@@ -170,7 +173,7 @@ export default function Settings() {
           )}
 
           {/* Running or paused - show connection controls */}
-          {(lastChecked === null || activityWatchConnected || activityWatchPaused) && (
+          {(!statusLoaded || activityWatchConnected || activityWatchPaused) && (
             <>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -179,7 +182,7 @@ export default function Settings() {
                     <Badge variant={activityWatchConnected ? "default" : "secondary"}>
                       {activityWatchConnected ? "Connected" : activityWatchPaused ? "Paused" : "Disconnected"}
                     </Badge>
-                    {lastChecked === null && !activityWatchPaused && (
+                    {!statusLoaded && !activityWatchPaused && (
                       <span className="text-sm text-muted-foreground">
                         Checking...
                       </span>
@@ -188,7 +191,7 @@ export default function Settings() {
                 </div>
                 <Button
                   variant={activityWatchConnected ? "outline" : "default"}
-                  disabled={lastChecked === null || isToggling}
+                  disabled={!statusLoaded || isToggling}
                   onClick={handleToggleConnection}
                   data-testid="button-activitywatch-toggle"
                 >
@@ -279,6 +282,14 @@ export default function Settings() {
                 <Label>Data Directory</Label>
                 <p className="text-sm text-muted-foreground truncate max-w-md" title={dbInfo.path.replace(/\/[^/]+$/, '')}>
                   {dbInfo.path.replace(/\/[^/]+$/, '')}
+                </p>
+              </div>
+            )}
+            {logPath && (
+              <div className="space-y-0.5">
+                <Label>Log File</Label>
+                <p className="text-sm text-muted-foreground truncate max-w-md" title={logPath}>
+                  {logPath}
                 </p>
               </div>
             )}

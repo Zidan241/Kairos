@@ -130,6 +130,11 @@ ipcMain.handle('app-get-version', () => {
   return app.getVersion();
 });
 
+// Log file path
+ipcMain.handle('get-log-path', () => {
+  return logger.logFile;
+});
+
 // Manual update checker — works without code signing
 async function checkForUpdates() {
   const response = await fetch('https://api.github.com/repos/Zidan241/Kairos/releases/latest');
