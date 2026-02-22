@@ -222,6 +222,22 @@ export default function DayScheduleTimeline({
     setDraggedFromOutside(false);
   };
 
+  // Find current or next scheduled item
+  const getScheduledLabel = () => {
+    const mins = currentTimeMinutes;
+    const upcoming = scheduledSubtasks
+      .filter(s => s.scheduledStartTime !== null && !s.isCompleted)
+      .sort((a, b) => a.scheduledStartTime! - b.scheduledStartTime!);
+    const current = upcoming.find(s => 
+      s.scheduledStartTime! <= mins && 
+      (s.scheduledStartTime! + (s.estimatedMinutes || 60)) > mins
+    );
+    const next = upcoming.find(s => s.scheduledStartTime! > mins);
+    if (current) return current.title;
+    if (next) return formatTime(next.scheduledStartTime!);
+    return '';
+  };
+
   if (isLoading) {
     return (
       <Card className="h-full min-h-[600px]">
@@ -237,15 +253,30 @@ export default function DayScheduleTimeline({
     );
   }
 
+  const scheduledLabel = getScheduledLabel();
+
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="flex-shrink-0">
-        <CardTitle>Day Schedule</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {scheduledSubtasks.length} scheduled items • {formatTime(startHour * 60)} - {formatTime(endHour * 60)}
-        </p>
+      <CardHeader className="flex-shrink-0 border-b pb-4 h-[5.5rem] justify-center">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Day Schedule</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              {scheduledSubtasks.length} scheduled items
+            </p>
+          </div>
+          {scheduledLabel && (
+            <div className="text-right leading-tight">
+              <p className="text-[11px] text-muted-foreground/50 uppercase tracking-wide">Up next</p>
+              <p className="flex items-center justify-end gap-1 text-sm text-muted-foreground mt-0.5">
+                <Clock className="h-3 w-3" />
+                {scheduledLabel}
+              </p>
+            </div>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="p-0 flex-1 overflow-hidden">
+      <CardContent className="p-0 flex-1 overflow-hidden rounded-b-xl">
         <div ref={scrollContainerRef} className="relative h-full overflow-y-auto overflow-x-hidden scrollbar-clean">
           {/* Timeline container - scrolls as one unit */}
           <div className="flex">
@@ -321,7 +352,7 @@ export default function DayScheduleTimeline({
                     <div className="flex items-start gap-2">
                       <GripVertical className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium mb-1 text-foreground">
+                        <div className="text-xs font-medium mb-1 text-foreground truncate">
                           {subtask.title}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">

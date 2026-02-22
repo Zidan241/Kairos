@@ -3,13 +3,15 @@ import { Link } from "wouter";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import ConnectionIndicator from "@/components/ConnectionIndicator";
+import ActiveTaskIndicator from "@/components/ActiveTaskIndicator";
 
 const menuItems = [
   {
@@ -36,10 +38,9 @@ const menuItems = [
 
 export default function AppSidebar() {
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel></SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -56,6 +57,11 @@ export default function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="pb-6 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:pb-6">
+        <ActiveTaskIndicator />
+        <div className="w-full border-t border-border" />
+        <ConnectionIndicator />
+      </SidebarFooter>
     </Sidebar>
   );
 }

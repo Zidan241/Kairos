@@ -69,7 +69,7 @@ export interface DayReportMetrics {
   timeline: Array<{
     start: number;  // hour as decimal (9.5 = 9:30 AM)
     end: number;
-    status: 'focus' | 'distracted' | 'idle' | 'untracked';
+    status: 'focus' | 'prefocus' | 'distracted' | 'idle' | 'untracked';
   }>;
   hourlyEfficiency: Array<{
     time: string;     // "9AM", "10AM"

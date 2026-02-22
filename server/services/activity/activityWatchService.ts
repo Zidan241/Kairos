@@ -13,7 +13,7 @@ import type { ActivityBucket } from '../../../shared/schema';
 
 const CONFIG = {
   /** Minimum percentage of window time with activity to avoid idle */
-  IDLE_THRESHOLD_PERCENTAGE: 0.1,
+  IDLE_THRESHOLD_PERCENTAGE: 0.25,
   /** Minimum percentage of bucket time for meaningful app usage */
   WORK_SESSION_APP_THRESHOLD_PERCENTAGE: 0.05,
   /** Consecutive prefocus buckets needed to reach focus */
@@ -21,11 +21,15 @@ const CONFIG = {
   /** Maximum consecutive distraction buckets before focus resets */
   MAX_DISTRACTION_BUCKETS: 2,
   /** Dominance ratio threshold for productive classification */
-  PRODUCTIVE_SWITCHING_THRESHOLD: 0.5,
+  PRODUCTIVE_SWITCHING_THRESHOLD: 0.4,
   /** Recent focused-bucket window for switching analysis */
   APP_SWITCHING_WINDOW_SIZE: 4,
   /** Unique-app ratio that triggers distraction */
   APP_SWITCHING_THRESHOLD: 0.75,
+  /** Max apps in a bucket to qualify for neutral (prefocus) instead of distraction */
+  NEUTRAL_MAX_APP_COUNT: 3,
+  /** Number of top apps per bucket to use for switching detection */
+  SWITCHING_TOP_N_APPS: 2,
 } as const;
 
 // ─── Internal types ─────────────────────────────────────────────────────────────
@@ -192,18 +196,26 @@ export class ActivityWatchService {
     sessionWindow: ActivityBucket[],
     workSessionApp: string
   ): ActivityCategory {
-    const hasSwitching = this.detectAppSwitchingDistraction(sessionWindow, workSessionApp, patterns.dominantApp);
+    const hasSwitching = this.detectAppSwitchingDistraction(sessionWindow, workSessionApp, patterns.sortedApps);
 
     // No history → first bucket
     if (!sessionWindow.length) {
-      return patterns.isProductive && !hasSwitching ? 'prefocus' : 'distraction';
+      if (patterns.isProductive && !hasSwitching) return 'prefocus';
+      if (this.isNeutral(patterns, hasSwitching)) return 'prefocus';
+      return 'distraction';
     }
 
     // With history
-    if (patterns.isProductive && !hasSwitching) {
+    if ((patterns.isProductive || this.isNeutral(patterns, hasSwitching)) && !hasSwitching) {
       return this.handleProductiveState(this.extractRecentStates(sessionWindow));
     }
+
     return 'distraction';
+  }
+
+  /** Neutral = not dominant but few apps and no switching */
+  private isNeutral(patterns: AppUsagePattern, hasSwitching: boolean): boolean {
+    return !patterns.isProductive && !hasSwitching && patterns.appCount <= CONFIG.NEUTRAL_MAX_APP_COUNT;
   }
 
   private handleProductiveState(states: SessionWindowStates): ActivityCategory {
@@ -242,28 +254,44 @@ export class ActivityWatchService {
   private detectAppSwitchingDistraction(
     sessionWindow: ActivityBucket[],
     workSessionApp: string,
-    currentDominantApp: string
+    currentSortedApps: [string, number][]
   ): boolean {
     if (sessionWindow.length < 2) return false;
 
-    // Collect focused buckets newest → oldest
-    const dominantApps: string[] = [];
+    // Fingerprint = sorted top-N app names as string, e.g. "terminal,vscode"
+    const toFingerprint = (apps: Record<string, number>): string =>
+      Object.entries(apps)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, CONFIG.SWITCHING_TOP_N_APPS)
+        .map(([name]) => name)
+        .sort()
+        .join(',');
+
+    const fingerprints: string[] = [];
+
+    // Current bucket (not yet stored)
+    if (currentSortedApps.length > 0) {
+      const currentApps = Object.fromEntries(currentSortedApps);
+      const fp = toFingerprint(currentApps);
+      if (fp) fingerprints.push(fp);
+    }
+
+    // Recent focused buckets from the same work session
     for (let i = sessionWindow.length - 1; i >= 0; i--) {
       const b = sessionWindow[i];
-      if (!['focus', 'prefocus'].includes(b.category) || !b.dominantApp) continue;
-      if (b.workSessionApp && b.workSessionApp !== workSessionApp) break;
+      if (!['focus', 'prefocus'].includes(b.category)) continue;
+      if (b.workSessionApp && b.workSessionApp !== workSessionApp) break; // different session
 
-      dominantApps.push(b.dominantApp);
-      if (dominantApps.length >= CONFIG.APP_SWITCHING_WINDOW_SIZE) break;
+      const fp = toFingerprint(this.parseAppsField(b.apps));
+      if (fp) fingerprints.push(fp);
+      if (fingerprints.length >= CONFIG.APP_SWITCHING_WINDOW_SIZE + 1) break;
     }
 
-    if (currentDominantApp && currentDominantApp !== '') {
-      dominantApps.push(currentDominantApp);
-    }
+    // Need at least 2 to compare
+    if (fingerprints.length < 2) return false;
 
-    if (dominantApps.length < 2) return false;
-
-    const uniqueRatio = new Set(dominantApps).size / dominantApps.length;
+    // High unique ratio = many different app combos = context switching
+    const uniqueRatio = new Set(fingerprints).size / fingerprints.length;
     return uniqueRatio >= CONFIG.APP_SWITCHING_THRESHOLD;
   }
 
@@ -275,20 +303,26 @@ export class ActivityWatchService {
     if (!sessionWindow.length) return '';
 
     const appTime: Record<string, number> = {};
+    const focusBuckets = sessionWindow.filter(b => ['focus', 'prefocus'].includes(b.category));
+    const bucketCount = focusBuckets.length;
 
-    for (const bucket of sessionWindow) {
-      if (!['focus', 'prefocus'].includes(bucket.category)) continue;
+    for (let idx = 0; idx < focusBuckets.length; idx++) {
+      const bucket = focusBuckets[idx];
 
       const startMs = new Date(bucket.startTime).getTime();
       const endMs = new Date(bucket.endTime).getTime();
       const durationSec = (endMs - startMs) / 1000;
       if (durationSec <= 0) continue;
 
-      // `apps` comes from the DB as JSON text → parsed as unknown
+      // Recency weight: most recent bucket = 1.0, oldest = 0.4, linear decay
+      const recencyWeight = bucketCount > 1
+        ? 0.4 + 0.6 * (idx / (bucketCount - 1))
+        : 1.0;
+
       const apps = this.parseAppsField(bucket.apps);
       for (const [appName, usageTime] of Object.entries(apps)) {
         if (usageTime / durationSec >= CONFIG.WORK_SESSION_APP_THRESHOLD_PERCENTAGE) {
-          appTime[appName] = (appTime[appName] ?? 0) + usageTime;
+          appTime[appName] = (appTime[appName] ?? 0) + usageTime * recencyWeight;
         }
       }
     }

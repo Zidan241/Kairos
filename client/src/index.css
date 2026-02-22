@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Electron: make header draggable for macOS hiddenInset title bar */
+.draggable-header {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* macOS Electron: top bar for traffic light buttons */
+.macos-titlebar-bar {
+  height: var(--titlebar-h, 2.25rem);
+}
+
+/* Push the fixed sidebar below the top bar */
+.macos-titlebar-layout [data-slot="sidebar-container"] {
+  top: var(--titlebar-h, 2.25rem);
+  height: calc(100svh - var(--titlebar-h, 2.25rem));
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);

@@ -11,16 +11,16 @@ export default function Home() {
       </div>
       
       {/* Bottom Section - Day Plan and Schedule Timeline - Scrollable */}
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 px-6 pb-6">
-        {/* Left Side - Day Plan */}
-        <div className="lg:w-1/2 flex flex-col min-h-0">
+      <div className="flex flex-row gap-6 flex-1 min-h-0 px-6 pb-6">
+        {/* Day Plan */}
+        <div className="w-1/2 flex flex-col min-h-0">
           <div className="flex-1 overflow-hidden">
             <DayPlan />
           </div>
         </div>
         
-        {/* Right Side - Day Schedule Timeline */}
-        <div className="lg:w-1/2 flex flex-col min-h-0" data-testid="section-day-schedule">
+        {/* Day Schedule Timeline */}
+        <div className="w-1/2 flex flex-col min-h-0" data-testid="section-day-schedule">
           <div className="flex-1 overflow-hidden">
             <DayScheduleTimeline />
           </div>

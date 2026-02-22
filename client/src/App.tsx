@@ -15,7 +15,9 @@ import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { isElectron } from "@/hooks/useElectron";
 
+const isMacElectron = isElectron() && navigator.platform.toLowerCase().includes('mac');
 const ONBOARDING_COMPLETE_KEY = "kairos_onboarding_complete";
 
 function Router() {
@@ -77,21 +79,26 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
         <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            <AppSidebar />
-            <div className="flex flex-col flex-1">
-              <header className="flex items-center justify-between p-4 border-b bg-background">
-                <div className="flex items-center gap-4">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <h1 className="text-lg font-semibold text-foreground">Kairos</h1>
-                </div>
-                <div className="flex items-center gap-4">
-                  <ThemeToggle />
-                </div>
-              </header>
-              <main className="flex-1 overflow-auto scrollbar-clean">
-                <Router />
-              </main>
+          <div className={`flex flex-col h-screen w-full ${isMacElectron ? 'macos-titlebar-layout' : ''}`}>
+            {isMacElectron && (
+              <div className="macos-titlebar-bar shrink-0 bg-sidebar draggable-header border-b" />
+            )}
+            <div className="flex flex-1 min-h-0">
+              <AppSidebar />
+              <div className="flex flex-col flex-1 min-w-0">
+                <header className="flex items-center justify-between pt-1.5 pb-2.5 px-4 border-b bg-background">
+                  <div className="flex items-center gap-4 no-drag">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" />
+                    <h1 className="text-lg font-bold font-brand tracking-tight text-foreground">Kairos</h1>
+                  </div>
+                  <div className="flex items-center gap-4 no-drag">
+                    <ThemeToggle />
+                  </div>
+                </header>
+                  <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-clean">
+                  <Router />
+                </main>
+              </div>
             </div>
           </div>
         </SidebarProvider>

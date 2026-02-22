@@ -47,7 +47,7 @@ export const taskScheduleHistory = sqliteTable("taskScheduleHistory", {
 // Activity buckets table (5-minute classifications)
 export const activityBuckets = sqliteTable("activityBuckets", {
   id: integer().primaryKey({ autoIncrement: true }),
-  subtaskId: integer().references(() => subtasks.id, { onDelete: "cascade" }), // Link directly to subtasks
+  subtaskId: integer().references(() => subtasks.id, { onDelete: "set null" }), // Link directly to subtasks
   date: text().notNull(), // YYYY-MM-DD
   startTime: text().notNull(), // ISO start time of bucket
   endTime: text().notNull(), // ISO end time of bucket

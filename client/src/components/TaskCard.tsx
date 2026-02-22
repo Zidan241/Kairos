@@ -89,7 +89,7 @@ export default function TaskCard({
               className="mt-1"
             />
             <div className="flex-1 min-w-0">
-              <CardTitle className={titleClassName} data-testid={`task-title-${task.id}`}>
+              <CardTitle className={`${titleClassName} break-words`} data-testid={`task-title-${task.id}`}>
                 {task.title}
               </CardTitle>
               {task.description && (
@@ -240,7 +240,7 @@ export default function TaskCard({
                           disabled={isParentCompleted}
                         />
                         <div className="min-w-0">
-                          <span className={`font-medium text-sm block mb-1 ${
+                          <span className={`font-medium text-sm block mb-1 break-words ${
                             subtask.isCompleted ? "line-through" : ""
                           }`}>
                             {subtask.title}

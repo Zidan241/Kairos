@@ -8,7 +8,7 @@ import { dbPath, sqlite } from "../core/database";
 import fs from "fs";
 import path from "path";
 import { 
-  insertTaskSchema, insertSubtaskSchema
+  insertTaskSchema, insertSubtaskSchema, updateTaskSchema
 } from "@shared/schema";
 import { dateUtils } from "@shared/utils";
 
@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   apiRouter.put("/tasks/:id", asyncHandler(async (req: any, res: any) => {
-    const validation = insertTaskSchema.partial().safeParse(req.body);
+    const validation = updateTaskSchema.partial().safeParse(req.body);
     if (!validation.success) {
       return res.status(400).json({ error: validation.error });
     }

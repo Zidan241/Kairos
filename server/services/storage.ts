@@ -72,6 +72,11 @@ export class SQLiteStorage {
       await db.update(subtasks).set({ isActive: false }).where(eq(subtasks.isActive, true));
     }
 
+    // When rescheduling, reset active state so the task doesn't carry over as active
+    if (finalUpdates.scheduledDate !== undefined) {
+      finalUpdates.isActive = false;
+    }
+
     // Handle schedule history
     if(finalUpdates.scheduledDate !== undefined){
       try{

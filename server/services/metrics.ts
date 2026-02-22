@@ -5,7 +5,6 @@ import {
 import {
   activityBuckets, subtasks, type ActivityBucket
 } from "@shared/schema";
-
 import { db } from "../core/database";
 import { eq, desc, inArray } from "drizzle-orm";
 import { dateUtils } from "@shared/utils";
@@ -72,7 +71,7 @@ export class MetricsService {
       if (dateMap) {
         dateMap.forEach((buckets, date) => {
           const dateTimeBreakdown = this.calculateTimeBreakdown(buckets);
-          const apps = this.calculateAppUsageForBuckets(buckets, dateTimeBreakdown.totalMinutes);
+          const apps = this.calculateAppUsageForBuckets(buckets);
           
           scheduleBreakdown.push({
             date,
@@ -99,8 +98,10 @@ export class MetricsService {
     let prefocusMinutes = 0;
     let idleMinutes = 0;
     let distractionMinutes = 0;
+    let productiveMinutes = 0;
     
-    for (const bucket of buckets) {
+    for (let i = 0; i < buckets.length; i++) {
+      const bucket = buckets[i];
       // Calculate actual bucket duration in minutes
       const startTime = new Date(bucket.startTime);
       const endTime = new Date(bucket.endTime);
@@ -109,10 +110,17 @@ export class MetricsService {
       switch (bucket.category) {
         case 'focus':
           focusMinutes += bucketMinutes;
+          // TODO: consider weighting longer focus streaks higher (e.g. consecutive focus
+          // buckets get a bonus multiplier) to reward sustained deep work over fragmented focus.
+          productiveMinutes += bucketMinutes;
           break;
-        case 'prefocus':
+        case 'prefocus': {
           prefocusMinutes += bucketMinutes;
+          // Prefocus that leads to focus counts fully; otherwise weighted at 0.5x
+          const next = buckets[i + 1];
+          productiveMinutes += next?.category === 'focus' ? bucketMinutes : bucketMinutes * 0.5;
           break;
+        }
         case 'distraction':
           distractionMinutes += bucketMinutes;
           break;
@@ -123,8 +131,12 @@ export class MetricsService {
     }
     
     const totalMinutes = focusMinutes + prefocusMinutes + idleMinutes + distractionMinutes;
-    const productiveMinutes = focusMinutes + prefocusMinutes;
-    const productivityRatio = totalMinutes > 0 ? productiveMinutes / totalMinutes : 0;
+    // Idle excluded from the denominator: productivity measures "when you were
+    // at the keyboard, how focused were you?" Breaks shouldn't penalise the score.
+    // TODO: consider splitting into two metrics — Focus Rate (this) and
+    // Utilization (active time / total time) — for a fuller picture.
+    const activeMinutes = focusMinutes + prefocusMinutes + distractionMinutes;
+    const productivityRatio = activeMinutes > 0 ? productiveMinutes / activeMinutes : 0;
     
     return {
       totalMinutes,
@@ -140,8 +152,7 @@ export class MetricsService {
    * Calculate app usage from activity buckets
    */
   private calculateAppUsageForBuckets(
-    buckets: Array<{ apps: unknown }>, 
-    totalMinutes: number
+    buckets: Array<{ apps: unknown }>
   ): AppUsage[] {
     const appUsageMap = new Map<string, number>();
     
@@ -156,13 +167,16 @@ export class MetricsService {
       }
     }
 
+    // Percentage is relative to total app time, not all tracked time
+    const totalAppMinutes = Array.from(appUsageMap.values()).reduce((sum, m) => sum + m, 0);
+
     const apps: AppUsage[] = [];
     appUsageMap.forEach((minutes, appName) => {
       apps.push({
         app: appName,
         minutes,
-        percentage: totalMinutes > 0 
-          ? Math.round((minutes / totalMinutes) * 100 * 10) / 10 
+        percentage: totalAppMinutes > 0
+          ? Math.round((minutes / totalAppMinutes) * 100 * 10) / 10
           : 0
       });
     });
@@ -191,7 +205,7 @@ export class MetricsService {
       : null;
 
     // Timeline segments
-    const timeline = this.buildTimelineSegments(buckets);
+    const timeline = this.buildTimelineSegments(buckets, date);
 
     // Hourly efficiency
     const hourlyEfficiency = this.buildHourlyEfficiency(buckets);
@@ -199,8 +213,8 @@ export class MetricsService {
     // Plan execution
     const planExecution = await this.buildPlanExecution(date, buckets);
 
-    // Top apps
-    const topApps = this.calculateAppUsageForBuckets(buckets, timeBreakdown.totalMinutes);
+    // Top apps — only return top 3 for the report
+    const topApps = this.calculateAppUsageForBuckets(buckets).slice(0, 3);
 
     return {
       date,
@@ -215,19 +229,23 @@ export class MetricsService {
 
   /**
    * Merge adjacent activity buckets into contiguous timeline segments.
-   * Maps: focus+prefocus → focus, distraction → distracted, idle → idle.
-   * Gaps between buckets become "untracked".
+   * Each category maps to its own status so prefocus is visually distinct.
+   * Gaps between buckets become "untracked". For today, a trailing untracked
+   * segment is appended from the last bucket to the current time so users
+   * can see time elapsed since their last tracked activity.
    */
   private buildTimelineSegments(
-    buckets: Array<{ startTime: string; endTime: string; category: ActivityCategory }>
+    buckets: Array<{ startTime: string; endTime: string; category: ActivityCategory }>,
+    date: string
   ): DayReportMetrics['timeline'] {
     if (buckets.length === 0) return [];
 
-    const mapStatus = (category: ActivityCategory): 'focus' | 'distracted' | 'idle' | 'untracked' => {
+    const mapStatus = (category: ActivityCategory): 'focus' | 'prefocus' | 'distracted' | 'idle' | 'untracked' => {
       switch (category) {
         case 'focus':
-        case 'prefocus':
           return 'focus';
+        case 'prefocus':
+          return 'prefocus';
         case 'distraction':
           return 'distracted';
         case 'idle':
@@ -243,8 +261,16 @@ export class MetricsService {
     };
 
     const segments: DayReportMetrics['timeline'] = [];
+
+    // Lead-in: untracked from top of the first hour to the first bucket
+    const firstStart = toDecimalHour(buckets[0].startTime);
+    const hourFloor = Math.floor(firstStart);
+    if (firstStart - hourFloor > 1 / 60) { // > 1 minute into the hour
+      segments.push({ start: hourFloor, end: firstStart, status: 'untracked' });
+    }
+
     let currentSegment = {
-      start: toDecimalHour(buckets[0].startTime),
+      start: firstStart,
       end: toDecimalHour(buckets[0].endTime),
       status: mapStatus(buckets[0].category),
     };
@@ -271,11 +297,30 @@ export class MetricsService {
     }
     segments.push({ ...currentSegment });
 
+    // Trailing untracked segment after last activity.
+    // Today: from last bucket to now (skip if gap < one bucket size — likely in-progress).
+    // Past days: from last bucket to the end of that hour.
+    const isToday = date === dateUtils.formatDate(new Date());
+    const lastEnd = currentSegment.end;
+    if (isToday) {
+      const now = new Date();
+      const nowDecimal = now.getHours() + now.getMinutes() / 60;
+      const BUCKET_MINUTES = 5;
+      if ((nowDecimal - lastEnd) * 60 > BUCKET_MINUTES) {
+        segments.push({ start: lastEnd, end: nowDecimal, status: 'untracked' });
+      }
+    } else {
+      const hourCeil = Math.ceil(lastEnd);
+      if (hourCeil - lastEnd > 1 / 60) { // > 1 minute remaining in the hour
+        segments.push({ start: lastEnd, end: hourCeil, status: 'untracked' });
+      }
+    }
+
     return segments;
   }
 
   /**
-   * Calculate per-hour efficiency = (focus + prefocus) / total tracked time.
+   * Calculate per-hour efficiency = (focus + prefocus) / active time (idle excluded).
    * Only includes hours that have at least some tracked activity.
    */
   private buildHourlyEfficiency(
@@ -284,8 +329,9 @@ export class MetricsService {
     if (buckets.length === 0) return [];
 
     // Accumulate minutes per clock hour, splitting buckets that cross hour boundaries
-    const hourlyData = new Map<number, { productive: number; total: number }>();
+    const hourlyData = new Map<number, { productive: number; active: number }>();
     const isProductive = (cat: ActivityCategory) => cat === 'focus' || cat === 'prefocus';
+    const isActive = (cat: ActivityCategory) => cat !== 'idle';
 
     for (const bucket of buckets) {
       const start = new Date(bucket.startTime);
@@ -300,8 +346,10 @@ export class MetricsService {
         const segmentEnd = nextHourBoundary < end ? nextHourBoundary : end;
         const minutes = (segmentEnd.getTime() - cursor.getTime()) / (1000 * 60);
 
-        const entry = hourlyData.get(hour) || { productive: 0, total: 0 };
-        entry.total += minutes;
+        const entry = hourlyData.get(hour) || { productive: 0, active: 0 };
+        if (isActive(bucket.category)) {
+          entry.active += minutes;
+        }
         if (isProductive(bucket.category)) {
           entry.productive += minutes;
         }
@@ -324,7 +372,7 @@ export class MetricsService {
       .map(([hour, data]) => ({
         time: formatHour(hour),
         timestamp: hour,
-        efficiency: data.total > 0 ? Math.round((data.productive / data.total) * 100) : 0,
+        efficiency: data.active > 0 ? Math.round((data.productive / data.active) * 100) : 0,
       }));
   }
 
@@ -404,15 +452,15 @@ export class MetricsService {
    * Detect if there's a task transition based on recent activity patterns
    */
   async checkTaskTransition(): Promise<boolean> {
-    // Configuration matching Python script
     const TASK_TRANSITION_BUCKETS_REQUIRED = 2;
     
-    // Get recent buckets (session window)
+    // Fetch one extra bucket so we can confirm the app actually *changed*
     const recentBuckets = await db.select().from(activityBuckets)
       .orderBy(desc(activityBuckets.startTime))
-      .limit(TASK_TRANSITION_BUCKETS_REQUIRED);
+      .limit(TASK_TRANSITION_BUCKETS_REQUIRED + 1);
 
-    // Get the current (most recent) bucket
+    if (recentBuckets.length < TASK_TRANSITION_BUCKETS_REQUIRED + 1) return false;
+
     const currentBucket = recentBuckets[0];
     
     // Only focused/prefocused activity can be a task transition
@@ -420,22 +468,20 @@ export class MetricsService {
       return false;
     }
 
-    // Count recent consecutive buckets with the new app
     const newApp = currentBucket.dominantApp;
-    let consecutiveNewApp = 0;
-    
-    // Check from the end (most recent) backwards - reversed order since we got desc
-    for (const bucket of recentBuckets) {
-      if (bucket.dominantApp === newApp && 
-          ['focus', 'prefocus'].includes(bucket.category)) {
-        consecutiveNewApp += 1;
-      } else {
-        break;
+    if (!newApp) return false; // no dominant app = can't detect transition
+
+    // Check that the N most recent buckets all share the new dominant app
+    for (let i = 0; i < TASK_TRANSITION_BUCKETS_REQUIRED; i++) {
+      const bucket = recentBuckets[i];
+      if (bucket.dominantApp !== newApp || !['focus', 'prefocus'].includes(bucket.category)) {
+        return false;
       }
     }
 
-    // Task transition confirmed if sustained focus on new app
-    return consecutiveNewApp >= TASK_TRANSITION_BUCKETS_REQUIRED;
+    // Confirm the bucket before them had a *different* app (actual transition)
+    const previousBucket = recentBuckets[TASK_TRANSITION_BUCKETS_REQUIRED];
+    return previousBucket.dominantApp !== newApp;
   }
 }
 

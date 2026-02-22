@@ -10,7 +10,7 @@ CREATE TABLE `activityBuckets` (
 	`workSessionApp` text,
 	`createdAt` text DEFAULT (datetime('now')) NOT NULL,
 	`updatedAt` text DEFAULT (datetime('now')) NOT NULL,
-	FOREIGN KEY (`subtaskId`) REFERENCES `subtasks`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`subtaskId`) REFERENCES `subtasks`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE TABLE `subtasks` (

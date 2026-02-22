@@ -96,10 +96,13 @@
   .distraction-reason { font-size:10px; margin-top:2px; font-weight:600; letter-spacing:.3px; }
   .reason-dominance { color:#92400e; }
   .reason-switching { color:#b91c1c; }
+  .fingerprint { font-size:10px; margin-top:3px; font-family:monospace; color:#64748b; letter-spacing:.2px; }
 </style>
 </head>
 <body>
 
+  <h1>Focus Session Timeline</h1>
+  <p class="subtitle">Visual walkthrough of the ActivityWatch classification algorithm — 7 consecutive 5-min buckets</p>
   <div class="data-flow" id="dataFlow"></div>
   <div class="flow-separator"></div>
 
@@ -114,77 +117,94 @@
   <section class="legend" id="legend"></section>
 
 <script>
-// Switching scenario data includes varied dominant apps across window buckets
-// Each bucket may list a dominant app with its percentage; we also keep an apps map for aggregation (simplified)
+// Example bucket data demonstrating the classification algorithm.
+// Each bucket is 5 minutes (300s). App times are in seconds.
+// Fingerprint = sorted top-2 app names, used for switching detection.
 const buckets = [
-  { id:'B1', start:'09:00', end:'09:05', dominant:'VSCode 48%', state:'prefocus', note:'Initial productive pattern', switching:'low', apps:{ vscode:48, browser:32, slack:20 } },
-  { id:'B2', start:'09:05', end:'09:10', dominant:'VSCode 55%', state:'prefocus', note:'Streak continues', switching:'low', apps:{ vscode:55, browser:25, slack:20 } },
-  { id:'B3', start:'09:10', end:'09:15', dominant:'Browser 52%', state:'focus', note:'Sustained dominance', switching:'high', apps:{ browser:52, vscode:34, slack:14 } },
-  { id:'B4', start:'09:15', end:'09:20', dominant:'Slack 46%', state:'distract', note:'Dominance drop', switching:'high', apps:{ slack:46, browser:30, vscode:24 } },
-  { id:'B5', start:'09:20', end:'09:25', dominant:'VSCode 58%', state:'focus', note:'Recovery', switching:'low', apps:{ vscode:58, browser:22, slack:20 } },
-  { id:'B6', start:'09:25', end:'09:30', dominant:'Browser 50%', state:'distract', note:'Volatile switching', switching:'high', apps:{ browser:50, vscode:28, slack:22 } },
-  { id:'B7', start:'09:30', end:'09:35', dominant:'<10% act.', state:'idle', note:'Idle period', switching:'low', apps:{ idle:92, vscode:4, browser:3, slack:1 } }
+  { id:'B1', start:'09:00', end:'09:05', dominant:'VSCode 47%', state:'prefocus',
+    note:'First bucket, dominant ≥40% → productive, no history → prefocus',
+    switching:'low', fingerprint:'browser,vscode',
+    apps:{ vscode:140, browser:95, slack:65 } },
+  { id:'B2', start:'09:05', end:'09:10', dominant:'VSCode 55%', state:'focus',
+    note:'2nd consecutive productive → focus earned',
+    switching:'low', fingerprint:'browser,vscode',
+    apps:{ vscode:165, browser:75, terminal:60 } },
+  { id:'B3', start:'09:10', end:'09:15', dominant:'Terminal 44%', state:'focus',
+    note:'Different fingerprint vs B2, but switching ratio 2/3 < 75% → no distraction → focus momentum',
+    switching:'low', fingerprint:'terminal,vscode',
+    apps:{ terminal:132, vscode:114, browser:54 } },
+  { id:'B4', start:'09:15', end:'09:20', dominant:'Browser 45%', state:'distract',
+    note:'Productive (≥40%) BUT 3 unique fingerprints in 4 buckets → switching distraction',
+    switching:'high', fingerprint:'browser,figma',
+    apps:{ browser:135, figma:100, slack:65 } },
+  { id:'B5', start:'09:20', end:'09:25', dominant:'VSCode 60%', state:'focus',
+    note:'Recovery: ≤2 distractions + focus existed before interruption',
+    switching:'low', fingerprint:'terminal,vscode',
+    apps:{ vscode:180, terminal:75, browser:45 } },
+  { id:'B6', start:'09:25', end:'09:30', dominant:'VSCode 65%', state:'focus',
+    note:'Focus momentum continues',
+    switching:'low', fingerprint:'terminal,vscode',
+    apps:{ vscode:195, terminal:60, browser:45 } },
+  { id:'B7', start:'09:30', end:'09:35', dominant:'<25% act.', state:'idle',
+    note:'Active time / window < 25% (~75s in 5 min) → idle',
+    switching:'low', fingerprint:'—',
+    apps:{ vscode:20, browser:10 } },
 ];
 
-const windowSize = 5; // sliding window size
-const endIndex = 5; // choose B6 as current end to show switching volatility before idle
-const startIndex = Math.max(0, endIndex - windowSize + 1); // covers B2..B6
+const windowSize = 6; // SESSION_WINDOW_SIZE — recent buckets passed as context
+const endIndex = 5;   // B6 as end of displayed session window
+const startIndex = 0; // B1 as start
 const windowBuckets = buckets.slice(startIndex, endIndex + 1);
 
-// Extract dominant app name and percentage from text like "VSCode 48%"
 function parseDominant(dStr){
-  const match = dStr.match(/^([^<]+?)\s(\d+)%/); // ignore <10% cases
+  const match = dStr.match(/^([^<]+?)\s(\d+)%/);
   if(!match) return { app:dStr.replace(/<.*/,'').trim(), pct:0 };
   return { app:match[1].trim().toLowerCase(), pct:parseFloat(match[2]) };
 }
 
-// Determine unique dominant apps in the window (by parsed dominant app names)
-function uniqueDominantApps(bks){
-  const set = new Set();
-  bks.forEach(b=>{ const p = parseDominant(b.dominant); if(p.app) set.add(p.app); });
-  return set.size;
+// Compute session app (simplified: recency-weighted aggregate of focus/prefocus buckets)
+function computeSessionApp(windowBuckets) {
+  const focusBuckets = windowBuckets.filter(b => b.state === 'focus' || b.state === 'prefocus');
+  const count = focusBuckets.length;
+  if (!count) return { app:'N/A', share:0 };
+
+  const total = {};
+  focusBuckets.forEach((b, idx) => {
+    // Recency weight: oldest=0.4, newest=1.0 (linear decay)
+    const weight = count > 1 ? 0.4 + 0.6 * (idx / (count - 1)) : 1.0;
+    const bucketDur = 300; // 5 min bucket
+    Object.entries(b.apps).forEach(([app, secs]) => {
+      if (app === 'idle') return;
+      // Match code: skip apps below 5% of bucket duration
+      if (secs / bucketDur < 0.05) return;
+      total[app] = (total[app] || 0) + secs * weight;
+    });
+  });
+
+  const entries = Object.entries(total).sort((a,b) => b[1] - a[1]);
+  if (!entries.length) return { app:'N/A', share:0 };
+  const sum = entries.reduce((s,[,v]) => s + v, 0);
+  return { app: entries[0][0], share: (entries[0][1] / sum * 100).toFixed(1) };
 }
 
-const uniqueDominantsInWindow = uniqueDominantApps(windowBuckets);
-const uniqueDominantRatio = uniqueDominantsInWindow / windowBuckets.length; // used for switching reason
-
-// Reason thresholds
-const DOMINANCE_THRESHOLD = 50; // < 50% becomes potential distraction reason
-const SWITCHING_UNIQUE_RATIO = 0.75; // example high switching ratio
+const sessionApp = computeSessionApp(windowBuckets);
+const stateLabels = { prefocus:'Pre Focus', focus:'Focus', distract:'Distraction', idle:'Idle' };
 
 // Annotate distraction reasons
-buckets.forEach((b, idx) => {
+buckets.forEach((b) => {
   if (b.state !== 'distract') return;
   const dom = parseDominant(b.dominant);
   const reasons = [];
-  if (dom.pct && dom.pct < DOMINANCE_THRESHOLD) {
-    reasons.push('<span class="reason-dominance">dominant &lt;50%</span>');
+  if (dom.pct && dom.pct < 40) {
+    reasons.push('<span class="reason-dominance">dominant &lt;40%</span>');
   }
-  if (uniqueDominantRatio >= SWITCHING_UNIQUE_RATIO || b.switching === 'high') {
-    reasons.push('<span class="reason-switching">high switching</span>');
+  if (b.switching === 'high') {
+    reasons.push('<span class="reason-switching">fingerprint switching ≥75%</span>');
   }
   if (reasons.length) {
     b._distractionReasonHtml = reasons.join(' + ');
   }
 });
-
-// Aggregate dominant session app (anchor) across window by cumulative percentage (approx sum of given percentages of key apps)
-function computeSessionApp(windowBuckets) {
-  const total = {};
-  windowBuckets.forEach(b => {
-    Object.entries(b.apps).forEach(([app, pct]) => {
-      if(app==='idle') return; total[app] = (total[app] || 0) + pct;
-    });
-  });
-  const entries = Object.entries(total).sort((a,b)=>b[1]-a[1]);
-  if (!entries.length) return { app:'N/A', share:0 };
-  const sum = entries.reduce((s,[,v])=>s+v,0);
-  const [app, val] = entries[0];
-  return { app, share: (val / sum * 100).toFixed(1) };
-}
-
-const sessionApp = computeSessionApp(windowBuckets);
-const stateLabels = { prefocus:'Pre Focus', focus:'Focus', distract:'Distraction', idle:'Idle' };
 
 function renderBuckets() {
   const row = document.getElementById('buckets');
@@ -198,6 +218,7 @@ function renderBuckets() {
       </div>
       <div class="bucket-state">${stateLabels[b.state]}</div>
       <div class="dominant">${b.dominant}</div>
+      <div class="fingerprint">🔑 ${b.fingerprint}</div>
       <div class="note">${b.note}</div>
       ${b._distractionReasonHtml ? `<div class="distraction-reason">${b._distractionReasonHtml}</div>` : ''}
     `;
@@ -217,12 +238,11 @@ function placeSessionBox() {
   const parentRect = layout.getBoundingClientRect();
   const box = document.createElement('div');
   box.className = 'session-box';
-  // Compute bounds relative to layout
   const pad = 8;
   const x = fRect.left - parentRect.left - pad;
   const y = fRect.top - parentRect.top - pad;
   const w = (lRect.right - fRect.left) + pad * 2;
-  const h = Math.max(...bucketEls.slice(startIndex,endIndex+1).map(el=>el.getBoundingClientRect().height)) + pad * 2;
+  const h = Math.max(...bucketEls.slice(startIndex, endIndex + 1).map(el => el.getBoundingClientRect().height)) + pad * 2;
   box.style.left = x + 'px';
   box.style.top = y + 'px';
   box.style.width = w + 'px';
@@ -240,62 +260,66 @@ function renderFSM() {
     <h2>State Machine Decisions</h2>
     <dl>
       <dt><span class="tag t-prefocus">Pre Focus → Focus</span></dt>
-      <dd>Two consecutive buckets with productive dominance (≥50%, low switching).</dd>
-  <dt><span class="tag t-focus">Focus Retained</span></dt>
-  <dd>Permit up to 2 consecutive distraction buckets without losing Focus if productive dominance returns immediately after.</dd>
-      <dt><span class="tag t-distract">Distraction Trigger</span></dt>
-      <dd>Dominant &lt;50% OR high switching (unique dominant ratio ≥ ${SWITCHING_UNIQUE_RATIO}).</dd>
-      <dt><span class="tag t-prefocus">Recovery</span></dt>
-      <dd>After distraction, need 2 productive buckets again to re-enter Focus.</dd>
+      <dd>Two consecutive productive buckets (dominant app ≥40% of time, no switching detected).</dd>
+      <dt><span class="tag t-focus">Focus Momentum</span></dt>
+      <dd>While in focus, any productive bucket without switching stays focus. Up to 2 distraction/idle buckets tolerated if focus existed before the interruption.</dd>
+      <dt><span class="tag t-distract">Distraction — Low Dominance</span></dt>
+      <dd>Dominant app &lt;40% AND more than 3 apps → not productive, not neutral → distraction.</dd>
+      <dt><span class="tag t-distract">Distraction — Switching</span></dt>
+      <dd>Fingerprint (sorted top-2 apps) compared across last 4 focused buckets in the same work session. Unique ratio ≥75% = switching distraction, even if dominant app ≥40%.</dd>
+      <dt><span class="tag t-prefocus">Neutral Path</span></dt>
+      <dd>Dominant &lt;40% but ≤3 apps and no switching → treated as prefocus (not distraction). Can progress to focus normally.</dd>
+      <dt><span class="tag t-focus">Recovery</span></dt>
+      <dd>After ≤2 distraction/idle buckets, a productive bucket recovers to focus if focus existed before the interruption. No need to re-earn via prefocus.</dd>
       <dt><span class="tag t-idle">Idle</span></dt>
-      <dd>Active time &lt;10% (insufficient engagement).</dd>
-          <dt><span class="tag t-focus">Session App</span></dt>
-          <dd>Aggregate top app in current window (excl. idle): ${sessionApp.app} (${sessionApp.share}%).</dd>
+      <dd>Active time &lt;25% of bucket window (~75s in 5 min).</dd>
+      <dt><span class="tag t-focus">Session App</span></dt>
+      <dd>Recency-weighted (0.4→1.0) aggregate of focus/prefocus buckets: <strong>${sessionApp.app}</strong> (${sessionApp.share}%). Scopes switching detection to the current work session.</dd>
     </dl>
   `;
 }
 
-    function renderDataFlow(){
-      const df = document.getElementById('dataFlow');
-      if(!df) return;
-      df.innerHTML = `
-        <div class="df-node raw">Raw ActivityWatch Data <span>window events</span></div>
-        <div class="df-arrow">→</div>
-        <div class="df-node buckets">Buckets <span>5m aggregation</span></div>
-        <div class="df-arrow">→</div>
-        <div class="df-node statemachine">State Machine <span>classify states</span></div>
-        <div class="df-arrow">→</div>
-        <div class="df-node session">Session Window <span>sliding N buckets</span></div>
-        <div class="df-arrow">→</div>
-        <div class="df-node decision">Decision <span>focus / distract / idle</span></div>
-      `;
-    }
+function renderDataFlow(){
+  const df = document.getElementById('dataFlow');
+  if(!df) return;
+  df.innerHTML = `
+    <div class="df-node raw">AW Window Events <span>intersected with not-afk</span></div>
+    <div class="df-arrow">→</div>
+    <div class="df-node buckets">5-Min Buckets <span>app usage aggregation</span></div>
+    <div class="df-arrow">→</div>
+    <div class="df-node statemachine">Classify <span>dominance + fingerprints</span></div>
+    <div class="df-arrow">→</div>
+    <div class="df-node session">Session Window <span>last 6 buckets (30 min)</span></div>
+    <div class="df-arrow">→</div>
+    <div class="df-node decision">Category <span>focus / prefocus / distraction / idle</span></div>
+  `;
+}
 
-    function renderWindowInfo() {
-      const el = document.getElementById('windowInfo');
-      if(!el) return;
-      const range = `${windowBuckets[0].id} → ${windowBuckets[windowBuckets.length-1].id}`;
-      const span = `${windowBuckets[0].start} - ${windowBuckets[windowBuckets.length-1].end}`;
-      el.innerHTML = `
-        <div><span>Window</span>: ${range}</div>
-        <div><span>Span</span>: ${span}</div>
-        <div><span>Focus</span>: ${windowBuckets.filter(b=>b.state==='focus').length}</div>
-        <div><span>Distract</span>: ${windowBuckets.filter(b=>b.state==='distract').length}</div>
-        <div><span>Session App</span>: ${sessionApp.app} (${sessionApp.share}%)</div>
-        <div><span>High Switching</span>: ${windowBuckets.filter(b=>b.switching==='high').length}/${windowBuckets.length}</div>
-      `;
-    }
+function renderWindowInfo() {
+  const el = document.getElementById('windowInfo');
+  if(!el) return;
+  const range = `${windowBuckets[0].id} → ${windowBuckets[windowBuckets.length-1].id}`;
+  const span = `${windowBuckets[0].start} - ${windowBuckets[windowBuckets.length-1].end}`;
+  el.innerHTML = `
+    <div><span>Window</span>: ${range}</div>
+    <div><span>Span</span>: ${span}</div>
+    <div><span>Focus</span>: ${windowBuckets.filter(b=>b.state==='focus').length}</div>
+    <div><span>Distract</span>: ${windowBuckets.filter(b=>b.state==='distract').length}</div>
+    <div><span>Session App</span>: ${sessionApp.app} (${sessionApp.share}%)</div>
+    <div><span>Switching</span>: ${windowBuckets.filter(b=>b.switching==='high').length}/${windowBuckets.length} buckets</div>
+  `;
+}
 
 function renderLegend() {
   const legend = document.getElementById('legend');
   legend.innerHTML = `
-    <div class="legend-item"><span class="swatch sw-prefocus"></span><div><strong>Pre Focus</strong><br/>Building productive dominance.</div></div>
-    <div class="legend-item"><span class="swatch sw-focus"></span><div><strong>Focus</strong><br/>Sustained productive streak.</div></div>
-    <div class="legend-item"><span class="swatch sw-distract"></span><div><strong>Distraction</strong><br/>Dominance lost / switching spike.</div></div>
-    <div class="legend-item"><span class="swatch sw-idle"></span><div><strong>Idle</strong><br/>&lt;10% active time.</div></div>
-    <div class="legend-item"><span class="switch-key" style="color:var(--switch-low)">↓</span><div><strong>Low Switching</strong><br/>Stable dominant app.</div></div>
-    <div class="legend-item"><span class="switch-key" style="color:var(--switch-high)">⇅</span><div><strong>High Switching</strong><br/>Frequent dominant changes.</div></div>
-    <div class="legend-item"><span class="switch-key" style="color:var(--session-border)">▢</span><div><strong>Session Window</strong><br/>Sliding analysis range.</div></div>
+    <div class="legend-item"><span class="swatch sw-prefocus"></span><div><strong>Pre Focus</strong><br/>Productive dominance (≥40%), building toward focus.</div></div>
+    <div class="legend-item"><span class="swatch sw-focus"></span><div><strong>Focus</strong><br/>Sustained productive streak (≥2 consecutive prefocus, or momentum).</div></div>
+    <div class="legend-item"><span class="swatch sw-distract"></span><div><strong>Distraction</strong><br/>Low dominance with many apps, or high fingerprint switching.</div></div>
+    <div class="legend-item"><span class="swatch sw-idle"></span><div><strong>Idle</strong><br/>&lt;25% active time in bucket window.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--switch-low)">↓</span><div><strong>Low Switching</strong><br/>Stable app fingerprint across recent buckets.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--switch-high)">⇅</span><div><strong>High Switching</strong><br/>Unique fingerprint ratio ≥75% → distraction trigger.</div></div>
+    <div class="legend-item"><span class="switch-key" style="color:var(--session-border)">▢</span><div><strong>Session Window</strong><br/>Last 6 buckets (30 min) used for context.</div></div>
   `;
 }
 
@@ -304,7 +328,6 @@ renderDataFlow();
 renderWindowInfo();
 renderFSM();
 renderLegend();
-// Delay session box placement until layout paints
 requestAnimationFrame(()=> placeSessionBox());
 </script>
 </body>

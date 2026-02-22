@@ -7,33 +7,21 @@ import { useState, useEffect } from "react";
 import { useElectron, isElectron } from "@/hooks/useElectron";
 import { activityApi, databaseApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useConnectionStatus } from "@/hooks/useConnectionStatus";
+
 export default function Settings() {
   const electron = useElectron();
   const isElectronApp = isElectron();
   const { toast } = useToast();
+  const { connected: activityWatchConnected, paused: activityWatchPaused, loading: statusLoading, lastChecked, refresh: refreshStatus } = useConnectionStatus();
 
-  const [activityWatchConnected, setActivityWatchConnected] = useState(false);
-  const [activityWatchPaused, setActivityWatchPaused] = useState(false);
-  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const statusLoaded = !statusLoading;
+
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string | null>(null);
   const [dbInfo, setDbInfo] = useState<{ path: string; size: number; lastBackup: string | null } | null>(null);
   const [isToggling, setIsToggling] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
-
-  const statusLoaded = lastChecked !== null;
-
-  const refreshStatus = async () => {
-    try {
-      const status = await activityApi.getStatus();
-      setActivityWatchPaused(status.paused);
-      setActivityWatchConnected(status.running && !status.paused);
-      setLastChecked(new Date());
-      return status;
-    } catch {
-      return null;
-    }
-  };
 
   const handleToggleConnection = async () => {
     if (isToggling) return;
@@ -87,8 +75,8 @@ export default function Settings() {
     if (isRechecking) return;
     setIsRechecking(true);
     try {
-      const status = await refreshStatus();
-      if (status?.running) {
+      await refreshStatus();
+      if (activityWatchConnected) {
         toast({ title: "ActivityWatch Detected", description: "ActivityWatch installation found." });
       } else {
         toast({ title: "Not Found", description: "ActivityWatch was not detected. Please install it first.", variant: "destructive" });
@@ -100,7 +88,6 @@ export default function Settings() {
 
   // Load data
   useEffect(() => {
-    refreshStatus();
     databaseApi.getInfo().then(info => {
       if (info.exists) setDbInfo({ path: info.path, size: info.size, lastBackup: info.lastBackup });
     }).catch(() => { });

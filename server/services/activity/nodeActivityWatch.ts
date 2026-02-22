@@ -62,6 +62,26 @@ export class NodeActivityWatchService {
     return this.awService.isRunning();
   }
 
+  private async checkIdleAutoStop(): Promise<void> {
+    const threshold = ACTIVITY_CONFIG.IDLE_AUTO_STOP_BUCKETS;
+    if (!threshold || threshold <= 0) return;
+
+    const activeSubtask = await storage.getActiveSubtask();
+    if (!activeSubtask) return;
+
+    const recentBuckets = await storage.getLatestBuckets(threshold);
+    if (recentBuckets.length < threshold) return;
+
+    const allIdle = recentBuckets
+      .slice(0, threshold)
+      .every(b => b.category === 'idle');
+
+    if (allIdle) {
+      await storage.updateSubtask(activeSubtask.id, { isActive: false });
+      console.log(`⏹️  Auto-stopped task "${activeSubtask.title}" after ${threshold} consecutive idle buckets (${threshold * NodeActivityWatchService.BUCKET_SIZE_MINUTES} min idle)`);
+    }
+  }
+
   async processRecentActivity(): Promise<void> {
     // Skip if AW isn't responding — avoids unnecessary work
     if (!await this.awService.isRunning()) return;
@@ -103,6 +123,9 @@ export class NodeActivityWatchService {
         workSessionApp: analysis.workSessionApp || null
       });
       console.log(`✅ Stored bucket ${analysis.startTime} (${analysis.category}) - Completed ${NodeActivityWatchService.BUCKET_SIZE_MINUTES}-min interval`);
+
+      // Auto-deactivate active task after N consecutive idle buckets
+      await this.checkIdleAutoStop();
     } catch (e) {
       console.error('❌ Bucket processing error:', e);
     }

@@ -71,6 +71,8 @@ export function useDeleteTask() {
     onSuccess: () => {
       // Simple: invalidate all task queries
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Also invalidate metrics since deleting a task could affect aggregated metrics
+      queryClient.invalidateQueries({ queryKey: ['metrics'] });
     },
   });
 }

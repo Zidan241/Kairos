@@ -104,7 +104,10 @@ export default function PlanningView() {
   // Event handlers
   const handleToggleDayPlan = (subtaskId: number, isPlannedOnDate: boolean) => {
       updateSubtaskMutation.mutate(
-      { id: subtaskId, updates: { scheduledDate: isPlannedOnDate ? null : dateUtils.getTodayDate() } },
+      { id: subtaskId, updates: isPlannedOnDate 
+        ? { scheduledDate: null, scheduledStartTime: null } 
+        : { scheduledDate: dateUtils.getTodayDate(), scheduledStartTime: null } 
+      },
       {
         onSuccess: () => {
           toast({
@@ -392,39 +395,53 @@ export default function PlanningView() {
 
         <TabsContent value="backlog" className="mt-6">
           <div className="space-y-4">
-            {backlogTasks.map((task) => (
-              <TaskCard
-                key={task.id} 
-                task={task}
-                handleCompleteTask={handleCompleteTask}
-                handleCompleteSubtask={handleCompleteSubtask}
-                handleAddSubtask={handleOpenSubtaskModal}
-                handleEditTask={handleEditTaskModal}
-                handleEditSubtask={handleEditSubtaskModal}
-                handleDeleteTask={handleDeleteTask}
-                handleDeleteSubtask={handleDeleteSubtask}
-                handleToggleDayPlan={handleToggleDayPlan}
-              />
-            ))}
+            {backlogTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-sm text-muted-foreground">No tasks yet</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Create a task to get started</p>
+              </div>
+            ) : (
+              backlogTasks.map((task) => (
+                <TaskCard
+                  key={task.id} 
+                  task={task}
+                  handleCompleteTask={handleCompleteTask}
+                  handleCompleteSubtask={handleCompleteSubtask}
+                  handleAddSubtask={handleOpenSubtaskModal}
+                  handleEditTask={handleEditTaskModal}
+                  handleEditSubtask={handleEditSubtaskModal}
+                  handleDeleteTask={handleDeleteTask}
+                  handleDeleteSubtask={handleDeleteSubtask}
+                  handleToggleDayPlan={handleToggleDayPlan}
+                />
+              ))
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="completed" className="mt-6">
           <div className="space-y-4">
-            {completedTasks.map((task) => (
-              <TaskCard 
-                key={task.id} 
-                task={task}
-                handleCompleteTask={handleCompleteTask}
-                handleCompleteSubtask={handleCompleteSubtask}
-                handleAddSubtask={handleOpenSubtaskModal}
-                handleEditTask={handleEditTaskModal}
-                handleEditSubtask={handleEditSubtaskModal}
-                handleDeleteTask={handleDeleteTask}
-                handleDeleteSubtask={handleDeleteSubtask}
-                handleToggleDayPlan={handleToggleDayPlan}
-              />
-            ))}
+            {completedTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-sm text-muted-foreground">No completed tasks</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Completed tasks will appear here</p>
+              </div>
+            ) : (
+              completedTasks.map((task) => (
+                <TaskCard 
+                  key={task.id} 
+                  task={task}
+                  handleCompleteTask={handleCompleteTask}
+                  handleCompleteSubtask={handleCompleteSubtask}
+                  handleAddSubtask={handleOpenSubtaskModal}
+                  handleEditTask={handleEditTaskModal}
+                  handleEditSubtask={handleEditSubtaskModal}
+                  handleDeleteTask={handleDeleteTask}
+                  handleDeleteSubtask={handleDeleteSubtask}
+                  handleToggleDayPlan={handleToggleDayPlan}
+                />
+              ))
+            )}
           </div>
         </TabsContent>
       </Tabs>

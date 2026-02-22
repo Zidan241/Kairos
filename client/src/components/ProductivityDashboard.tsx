@@ -1,4 +1,4 @@
-import { Clock, Zap, TrendingDown, Moon } from "lucide-react";
+import { CircleDot, Zap, Shuffle } from "lucide-react";
 import MetricCard from "./MetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDailyMetrics } from "@/hooks/useMetrics";
@@ -34,13 +34,13 @@ export default function ProductivityDashboard() {
           title="Focus Time"
           value={focusHours.toString()}
           unit="h"
-          icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+          icon={<CircleDot className="h-4 w-4 text-muted-foreground" />}
         />
         <MetricCard
           title="Distraction Time"
           value={distractionHours.toString()}
           unit="h"
-          icon={<TrendingDown className="h-4 w-4 text-muted-foreground" />}
+          icon={<Shuffle className="h-4 w-4 text-muted-foreground" />}
         />
         <MetricCard
           title="Productivity"

@@ -1,10 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ActivitySegment {
   start: number; // hour (9 = 9AM)
   end: number;   // hour (10 = 10AM)
-  status: 'focus' | 'distracted' | 'idle' | 'untracked';
+  status: 'focus' | 'prefocus' | 'distracted' | 'idle' | 'untracked';
   task?: string;
 }
 
@@ -20,10 +21,10 @@ export default function TimelineChart({ data }: TimelineChartProps) {
   // Derive range from actual data instead of hardcoding 9–5
   const dataStart = data?.segments?.length
     ? Math.floor(Math.min(...data.segments.map(s => s.start)))
-    : 9;
+    : 0;
   const dataEnd = data?.segments?.length
     ? Math.ceil(Math.max(...data.segments.map(s => s.end)))
-    : 17;
+    : 24;
   const dayStart = dataStart;
   const dayEnd = Math.max(dataEnd, dayStart + 1); // at least 1 hour range
   const totalHours = dayEnd - dayStart;
@@ -47,7 +48,8 @@ export default function TimelineChart({ data }: TimelineChartProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'focus': return 'bg-green-400/75';
+      case 'focus': return 'bg-green-500/75';
+      case 'prefocus': return 'bg-green-300/60';
       case 'distracted': return 'bg-red-400/75';
       case 'idle': return 'bg-slate-400/50';
       case 'untracked': return '';
@@ -62,6 +64,7 @@ export default function TimelineChart({ data }: TimelineChartProps) {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'focus': return 'Focus';
+      case 'prefocus': return 'Pre Focus';
       case 'distracted': return 'Distracted';
       case 'idle': return 'Idle';
       case 'untracked': return 'Untracked';
@@ -102,8 +105,12 @@ export default function TimelineChart({ data }: TimelineChartProps) {
           {/* Legend */}
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-400/75"></div>
+              <div className="w-4 h-4 rounded bg-green-500/75"></div>
               <span>Focus</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-green-300/60"></div>
+              <span>Pre Focus</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-red-400/75"></div>
@@ -132,38 +139,53 @@ export default function TimelineChart({ data }: TimelineChartProps) {
 
             {/* Timeline container */}
             <div className="relative h-8 bg-border rounded-md overflow-hidden" data-testid="timeline-strip">
-              {data.segments.map((segment, index) => {
-                const leftPercent = ((segment.start - dayStart) / totalHours) * 100;
-                const widthPercent = ((segment.end - segment.start) / totalHours) * 100;
-                const isNarrow = widthPercent < 8; // Hide label if too narrow
+              <TooltipProvider delayDuration={150}>
+                {data.segments.map((segment, index) => {
+                  const leftPercent = ((segment.start - dayStart) / totalHours) * 100;
+                  const widthPercent = ((segment.end - segment.start) / totalHours) * 100;
+                  const isNarrow = widthPercent < 8; // Hide label if too narrow
+                  const duration = (segment.end - segment.start) * 60;
+                  const durationLabel = duration >= 60
+                    ? `${(duration / 60).toFixed(1)}h`
+                    : `${Math.round(duration)}m`;
 
-                return (
-                  <div
-                    key={index}
-                    className={`absolute h-full ${getStatusColor(segment.status)} border-r border-background`}
-                    style={{
-                      left: `${leftPercent}%`,
-                      width: `${widthPercent}%`,
-                      ...(segment.status === 'untracked' ? getUntrackedStyle() : {}),
-                    }}
-                    data-testid={`segment-${index}`}
-                    title={`${formatTime(segment.start)} - ${formatTime(segment.end)}: ${getStatusLabel(segment.status)}${segment.task ? ` • ${segment.task}` : ''}`}
-                  >
-                    {/* Task label */}
-                    {segment.task && !isNarrow && (
-                      <div className="absolute inset-0 flex items-center justify-center px-2">
-                        <Badge 
-                          variant="secondary" 
-                          className="text-xs bg-background/90 text-foreground border-0 truncate max-w-full"
-                          data-testid={`task-label-${index}`}
+                  return (
+                    <Tooltip key={index}>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={`absolute h-full ${getStatusColor(segment.status)} border-r border-muted-foreground/10`}
+                          style={{
+                            left: `${leftPercent}%`,
+                            width: `${widthPercent}%`,
+                            ...(segment.status === 'untracked' ? getUntrackedStyle() : {}),
+                          }}
+                          data-testid={`segment-${index}`}
                         >
-                          {segment.task}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          {/* Task label */}
+                          {segment.task && !isNarrow && (
+                            <div className="absolute inset-0 flex items-center justify-center px-2">
+                              <Badge
+                                variant="secondary"
+                                className="text-xs bg-background/90 text-foreground border-0 truncate max-w-full"
+                                data-testid={`task-label-${index}`}
+                              >
+                                {segment.task}
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        <div className="font-medium">{getStatusLabel(segment.status)}</div>
+                        <div className="text-muted-foreground">
+                          {formatTime(segment.start)} – {formatTime(segment.end)} ({durationLabel})
+                        </div>
+                        {segment.task && <div className="mt-0.5">{segment.task}</div>}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </TooltipProvider>
             </div>
 
             {/* Hour tick marks */}

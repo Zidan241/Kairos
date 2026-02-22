@@ -96,9 +96,9 @@ export default function TaskItem({
         allSubtasksCompleted ? 'opacity-60' : ''
       } bg-card`}
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-2">
-          <span className={`font-medium ${allSubtasksCompleted ? 'line-through' : ''}`} data-testid={`text-task-title-${task.id}`}>
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="mb-2">
+          <span className={`font-medium break-words ${allSubtasksCompleted ? 'line-through' : ''}`} data-testid={`text-task-title-${task.id}`}>
             {task.title}
           </span>
         </div>
@@ -174,9 +174,9 @@ export default function TaskItem({
           data-testid={`checkbox-task-${subtask.id}`}
         />
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`font-medium ${subtask.isCompleted ? 'line-through' : ''}`} data-testid={`text-task-title-${subtask.id}`}>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="mb-2">
+            <span className={`font-medium break-words ${subtask.isCompleted ? 'line-through' : ''}`} data-testid={`text-task-title-${subtask.id}`}>
               {subtask.title}
             </span>
             {subtask.isActive && (
