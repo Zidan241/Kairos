@@ -175,14 +175,14 @@ export default function TaskItem({
         />
         
         <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="mb-2">
+          <div className="flex items-start gap-2 mb-2">
             <span className={`font-medium break-words ${subtask.isCompleted ? 'line-through' : ''}`} data-testid={`text-task-title-${subtask.id}`}>
               {subtask.title}
             </span>
             {subtask.isActive && (
               <Badge 
                 variant="secondary" 
-                className="text-xs bg-chart-2 text-white border-chart-2 transition-all duration-200"
+                className="text-xs bg-chart-2 text-white border-chart-2 transition-all duration-200 shrink-0"
               >
                 <Zap className="h-3 w-3 mr-1" />
                 Active

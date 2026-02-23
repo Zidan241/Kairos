@@ -12,7 +12,7 @@ interface DayScheduleTimelineProps {
   endHour?: number;
 }
 
-export default function DayScheduleTimeline({ 
+export default function DayScheduleTimeline({
   date = dateUtils.getTodayDate(),
   onTaskScheduled,
   startHour = 0,
@@ -20,7 +20,7 @@ export default function DayScheduleTimeline({
 }: DayScheduleTimelineProps) {
   // Fetch scheduled subtasks for the date
   const { data: allScheduledSubtasks = [], isLoading } = useScheduledSubtasks(date);
-  
+
   // Filter out subtasks that don't have a scheduledStartTime
   const scheduledSubtasks = allScheduledSubtasks.filter(subtask => subtask.scheduledStartTime !== null);
 
@@ -99,12 +99,12 @@ export default function DayScheduleTimeline({
     const slots = [];
     const startMinutes = startHour * 60;
     const endMinutes = endHour * 60;
-    
+
     // Create a slot every 30 minutes
     for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
       const hour = Math.floor(minutes / 60);
       const isHour = minutes % 60 === 0;
-      
+
       slots.push({
         time: minutes,
         label: formatTime(minutes),
@@ -117,26 +117,70 @@ export default function DayScheduleTimeline({
 
   const timeSlots = generateTimeSlots();
 
+  // Assign columns to overlapping subtasks
+  const getColumnLayout = (subtasks: typeof scheduledSubtasks) => {
+    const sorted = [...subtasks].sort((a, b) => (a.scheduledStartTime || 0) - (b.scheduledStartTime || 0));
+    const placed: { id: number; end: number; col: number }[] = [];
+
+    for (const subtask of sorted) {
+      const start = subtask.scheduledStartTime || 0;
+      const end = start + (subtask.estimatedMinutes || 60);
+
+      // Find first column not occupied by an overlapping item
+      const overlapping = placed.filter(p => p.end > start);
+      const usedCols = new Set(overlapping.map(p => p.col));
+      let col = 0;
+      while (usedCols.has(col)) col++;
+
+      placed.push({ id: subtask.id, end, col });
+    }
+
+    // For each item, totalCols = max columns used among all its overlapping peers
+    const layout = new Map<number, { col: number; totalCols: number }>();
+    for (const item of placed) {
+      const start = sorted.find(s => s.id === item.id)!.scheduledStartTime || 0;
+      const overlapping = placed.filter(p => {
+        const pStart = sorted.find(s => s.id === p.id)!.scheduledStartTime || 0;
+        return pStart < item.end && (pStart + (sorted.find(s => s.id === p.id)!.estimatedMinutes || 60)) > start;
+      });
+      const totalCols = Math.max(...overlapping.map(p => p.col)) + 1;
+      layout.set(item.id, { col: item.col, totalCols });
+    }
+
+    return layout;
+  };
+
+  const columnLayout = getColumnLayout(scheduledSubtasks);
+
   // Calculate position and height for scheduled subtasks
-  const getTaskPosition = (subtask: any) => {    
+  const getTaskPosition = (subtask: any) => {
     const startMinutes = subtask.scheduledStartTime!;
     const timelineStart = startHour * 60;
     const timelineEnd = endHour * 60;
-    const timelineHeight = timelineEnd - timelineStart; // Total minutes in timeline
-    
-    // Calculate position as percentage from top - each slot is 30 minutes
+    const timelineHeight = timelineEnd - timelineStart;
+
     const relativeStart = Math.max(0, startMinutes - timelineStart);
     const top = (relativeStart / timelineHeight) * 100;
-    
-    // Calculate height as percentage - use estimatedMinutes for duration
+
     const duration = subtask.estimatedMinutes || 60;
     const height = (duration / timelineHeight) * 100;
-    
-    return { top: `${top}%`, height: `${height}%` };
+
+    // Column-based horizontal positioning
+    const layout = columnLayout.get(subtask.id);
+    const col = layout?.col ?? 0;
+    const totalCols = layout?.totalCols ?? 1;
+    const widthPercent = 100 / totalCols;
+    const leftPercent = col * widthPercent;
+
+    return {
+      top: `${top}%`,
+      height: `${height}%`,
+      left: `${leftPercent}%`,
+      width: `${widthPercent}%`,
+    };
   };
 
-  const handleTimeSlotClick = (timeMinutes: number) => {
-  };
+
 
   const handleRemoveFromSchedule = async (taskId: number) => {
     try {
@@ -184,18 +228,18 @@ export default function DayScheduleTimeline({
 
   const handleDrop = async (e: React.DragEvent, dropTimeMinutes: number) => {
     e.preventDefault();
-    
+
     try {
       // Check if this is a task from DayPlan
       const taskDataStr = e.dataTransfer.getData('application/json');
       if (taskDataStr) {
         const taskData = JSON.parse(taskDataStr);
-        
+
         await scheduleTaskMutation.mutateAsync({
           id: taskData.id,
           updates: { scheduledStartTime: dropTimeMinutes }
         });
-        
+
         // Notify parent component
         onTaskScheduled?.({
           id: taskData.id,
@@ -203,7 +247,7 @@ export default function DayScheduleTimeline({
           estimatedTime: taskData.estimatedTime || 60,
           startTime: dropTimeMinutes
         });
-        
+
         console.log(`Task "${taskData.title}" scheduled at ${formatTime(dropTimeMinutes)}`);
       } else if (draggedTask) {
         const taskId = draggedTask;
@@ -211,13 +255,13 @@ export default function DayScheduleTimeline({
           id: taskId,
           updates: { scheduledStartTime: dropTimeMinutes }
         });
-        
+
         console.log(`Task ${taskId} moved to ${formatTime(dropTimeMinutes)}`);
       }
     } catch (error) {
       console.error('Error handling drop:', error);
     }
-    
+
     setDraggedTask(null);
     setDraggedFromOutside(false);
   };
@@ -228,8 +272,8 @@ export default function DayScheduleTimeline({
     const upcoming = scheduledSubtasks
       .filter(s => s.scheduledStartTime !== null && !s.isCompleted)
       .sort((a, b) => a.scheduledStartTime! - b.scheduledStartTime!);
-    const current = upcoming.find(s => 
-      s.scheduledStartTime! <= mins && 
+    const current = upcoming.find(s =>
+      s.scheduledStartTime! <= mins &&
       (s.scheduledStartTime! + (s.estimatedMinutes || 60)) > mins
     );
     const next = upcoming.find(s => s.scheduledStartTime! > mins);
@@ -291,9 +335,9 @@ export default function DayScheduleTimeline({
                 </div>
               ))}
             </div>
-            
+
             {/* Schedule area */}
-            <div 
+            <div
               className="flex-1 relative bg-background"
               onDragLeave={handleDragLeave}
             >
@@ -302,7 +346,6 @@ export default function DayScheduleTimeline({
                 <div
                   key={slot.time}
                   className="relative h-12 border-b border-muted/20 hover:bg-muted/10 cursor-pointer transition-colors group"
-                  onClick={() => handleTimeSlotClick(slot.time)}
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, slot.time)}
@@ -318,7 +361,7 @@ export default function DayScheduleTimeline({
                   )}
                 </div>
               ))}
-              
+
               {/* Current time indicator */}
               {isCurrentTimeVisible && (
                 <div
@@ -336,50 +379,56 @@ export default function DayScheduleTimeline({
                 const isDragging = draggedTask === subtask.id;
                 const startTime = subtask.scheduledStartTime || 0;
                 const duration = subtask.estimatedMinutes || 60;
-                
+                const isCompact = duration < 30;
+
                 return (
                   <div
                     key={subtask.id}
-                    className={`absolute left-1 right-1 bg-background border border-border rounded-md p-2 shadow-sm transition-all duration-200 z-10 overflow-hidden border-l-4 border-l-blue-400 cursor-move hover:shadow-lg hover:scale-[1.02] ${
-                      isDragging ? 'opacity-50 scale-105 shadow-lg z-20 border-blue-400' : ''
-                    }`}
-                    style={position}
+                    className={`absolute bg-background border border-border rounded-md shadow-sm transition-all duration-200 overflow-hidden border-l-4 border-l-blue-400 cursor-move hover:shadow-lg ${isCompact ? 'px-2 py-0.5' : 'px-2 py-1'
+                      } ${isDragging ? 'opacity-50 scale-105 shadow-lg border-blue-400' : ''
+                      } ${(draggedTask || draggedFromOutside) && !isDragging ? 'pointer-events-none' : 'z-10 hover:z-20'
+                      }`}
+                    style={isCompact ? { ...position, minHeight: '1.5rem' } : position}
                     draggable={true}
                     onDragStart={(e) => handleDragStart(e, subtask.id)}
                     onDragEnd={handleDragEnd}
                     data-testid={`scheduled-task-${subtask.id}`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className={`flex items-center gap-1.5 h-full group/task`}>
                       <GripVertical className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium mb-1 text-foreground truncate">
+                        <div className="text-xs font-medium text-foreground truncate">
                           {subtask.title}
+                          {isCompact && <span className="text-muted-foreground font-normal"> ({formatDuration(duration)})</span>}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="h-2.5 w-2.5" />
-                          <span>
-                            {formatTime(startTime)} - {formatTime(startTime + duration)}
-                          </span>
-                          <Badge variant="secondary" className="text-xs">
-                            {formatDuration(duration)}
-                          </Badge>
-                        </div>
+                        {!isCompact && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <Clock className="h-2.5 w-2.5" />
+                            <span>
+                              {formatTime(startTime)} - {formatTime(startTime + duration)}
+                            </span>
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                              {formatDuration(duration)}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveFromSchedule(subtask.id);
                         }}
-                        className="flex-shrink-0 p-1 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
+                        className={`flex-shrink-0 p-0.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors
+                        `}
                         title="Remove from schedule"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-2.5 w-2.5" />
                       </button>
                     </div>
                   </div>
                 );
               })}
-              
+
 
             </div>
           </div>

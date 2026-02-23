@@ -105,7 +105,17 @@ export class SQLiteStorage {
 
   async getActiveSubtask(): Promise<Subtask | undefined> {
     const result = await db.select().from(subtasks).where(eq(subtasks.isActive, true)).limit(1);
-    return result[0];
+    const active = result[0];
+    if (!active) return undefined;
+
+    // Auto-deactivate if scheduled for a previous day
+    const today = dateUtils.getTodayDate();
+    if (active.scheduledDate && active.scheduledDate < today) {
+      await db.update(subtasks).set({ isActive: false }).where(eq(subtasks.id, active.id));
+      return undefined;
+    }
+
+    return active;
   }
 
   async getScheduledSubtasks(date: string): Promise<Subtask[]> {
