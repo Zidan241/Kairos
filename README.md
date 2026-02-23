@@ -77,6 +77,21 @@ bun run dev
 - **Backend**: Bun, Express, Drizzle ORM, SQLite
 - **ActivityWatch**: HTTP client for focus/distraction tracking
 
+## How Focus Tracking Works
+
+Kairos periodically polls ActivityWatch and classifies each interval as **focus**, **prefocus**, **distraction**, or **idle** based on app dominance and switching patterns. Sustained productive intervals earn focus status, and brief interruptions are tolerated before resetting. See [ActivityWatch Algorithm](docs/ACTIVITY_WATCH_ALGORITHM.md) for the full details.
+
+<details>
+<summary>Example Timeline</summary>
+
+![Focus Timeline](docs/focus_timeline_230226.png)
+
+</details>
+
+## Architecture
+
+Electron spawns a Bun server as a child process. The React frontend talks to the server over HTTP for data and to Electron over IPC for settings. See [Architecture](docs/ARCHITECTURE.md) for more.
+
 ## License
 
 [MIT](LICENSE)
