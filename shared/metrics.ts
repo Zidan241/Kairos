@@ -10,7 +10,8 @@ export interface TimeBreakdown {
   prefocusMinutes: number;
   idleMinutes: number;
   distractionMinutes: number;
-  productivityRatio: number; // (focus + prefocus) / total
+  productivityRatio: number; // (focus + weighted prefocus) / active time
+  longestFocusStreak: number; // longest consecutive focus run in minutes
 }
 
 export interface AppUsage {

@@ -99,6 +99,8 @@ export class MetricsService {
     let idleMinutes = 0;
     let distractionMinutes = 0;
     let productiveMinutes = 0;
+    let currentStreak = 0;
+    let longestStreak = 0;
     
     for (let i = 0; i < buckets.length; i++) {
       const bucket = buckets[i];
@@ -110,12 +112,13 @@ export class MetricsService {
       switch (bucket.category) {
         case 'focus':
           focusMinutes += bucketMinutes;
-          // TODO: consider weighting longer focus streaks higher (e.g. consecutive focus
-          // buckets get a bonus multiplier) to reward sustained deep work over fragmented focus.
           productiveMinutes += bucketMinutes;
+          currentStreak += bucketMinutes;
+          longestStreak = Math.max(longestStreak, currentStreak);
           break;
         case 'prefocus': {
           prefocusMinutes += bucketMinutes;
+          currentStreak = 0;
           // Prefocus that leads to focus counts fully; otherwise weighted at 0.5x
           const next = buckets[i + 1];
           productiveMinutes += next?.category === 'focus' ? bucketMinutes : bucketMinutes * 0.5;
@@ -123,9 +126,11 @@ export class MetricsService {
         }
         case 'distraction':
           distractionMinutes += bucketMinutes;
+          currentStreak = 0;
           break;
         case 'idle':
           idleMinutes += bucketMinutes;
+          currentStreak = 0;
           break;
       }
     }
@@ -133,8 +138,6 @@ export class MetricsService {
     const totalMinutes = focusMinutes + prefocusMinutes + idleMinutes + distractionMinutes;
     // Idle excluded from the denominator: productivity measures "when you were
     // at the keyboard, how focused were you?" Breaks shouldn't penalise the score.
-    // TODO: consider splitting into two metrics — Focus Rate (this) and
-    // Utilization (active time / total time) — for a fuller picture.
     const activeMinutes = focusMinutes + prefocusMinutes + distractionMinutes;
     const productivityRatio = activeMinutes > 0 ? productiveMinutes / activeMinutes : 0;
     
@@ -144,7 +147,8 @@ export class MetricsService {
       prefocusMinutes,
       idleMinutes,
       distractionMinutes,
-      productivityRatio: Math.round(productivityRatio * 100) / 100
+      productivityRatio: Math.round(productivityRatio * 100) / 100,
+      longestFocusStreak: Math.round(longestStreak)
     };
   }
 
@@ -435,7 +439,8 @@ export class MetricsService {
           distractionMinutes: 0,
           prefocusMinutes: 0,
           idleMinutes: 0,
-          productivityRatio: 0
+          productivityRatio: 0,
+          longestFocusStreak: 0
         }
       };
     }

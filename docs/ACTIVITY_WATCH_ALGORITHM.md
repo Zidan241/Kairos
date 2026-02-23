@@ -1,54 +1,44 @@
 # ActivityWatch Algorithm
 
-## How It Works
+## What It Does
 
-Every 5 minutes, the server queries ActivityWatch's REST API for window events filtered by non-AFK time, merged by app. Each 5-minute bucket is classified into one of four states: `idle`, `prefocus`, `focus`, or `distraction`.
+Kairos polls ActivityWatch for app usage and classifies each interval as **focus**, **prefocus**, **distraction**, or **idle**. These feed the productivity metrics and timeline shown in the app.
 
-### Classification Pipeline
+## How Classification Works
 
-1. **Fetch canonical events** — AW query intersects `aw-watcher-window` with `aw-watcher-afk` (status=not-afk), then merges by app name.
-2. **Idle check** — If active time < 25% of the bucket window (~75s in 5 min), classify as `idle`.
-3. **App pattern analysis** — Calculate dominance ratio (top app time / total time). If ≥ 40%, the bucket is considered "productive."
-4. **App switching detection** — Build a "fingerprint" per bucket (sorted top-2 app names, e.g. `"terminal,vscode"`). Collect fingerprints from the current bucket + last 4 focused buckets **within the same work session** (stops at session boundary). If the unique-fingerprint ratio ≥ 75%, flag as switching distraction. Same app combo in any order produces the same fingerprint, so IDE↔Terminal alternation is not flagged.
-5. **State machine** — Combine productivity + switching + session history:
-   - First bucket with no history: `prefocus` (if productive, or if ≤ 3 apps without switching) or `distraction`
-   - 1 prefocus in the window + current bucket productive → `focus` (2 total productive buckets needed, only 1 stored as prefocus)
-   - Already in focus → stays `focus` (momentum)
-   - ≤ 2 distraction/idle buckets after focus → recovers to `focus` (tolerance for brief interruptions)
-   - >2 consecutive distractions → resets to `prefocus` (must re-earn focus)
-   - Not productive but ≤ 3 apps and no switching → `prefocus` (neutral path, can still progress to focus)
-   - Otherwise → `distraction`
+Each interval goes through:
 
-### Work Session App
+1. **Fetch** — Query AW for window events during active (non-AFK) time, merged by app.
+2. **Idle check** — Too little active time → **idle**.
+3. **Productivity check** — If one app dominates usage, the interval is considered productive.
+4. **Switching check** — Fingerprints (top apps per interval) are compared across recent intervals. High variety signals context switching → **distraction**.
+5. **State machine** — Combines the above with recent history:
+   - Productive intervals build toward **focus** (requires a warm-up period).
+   - Once in focus, momentum is maintained through brief interruptions.
+   - Too many consecutive distractions reset progress.
+   - Low app counts without switching get a neutral **prefocus** path.
 
-Tracks the primary app across focus/prefocus buckets in the session window (last 6 buckets) with recency weighting (most recent = 1.0, oldest = 0.4). Used to detect when switching is happening *within* the same work session vs. a genuine context change.
+## Productivity Score
 
-### Productivity Metrics
+- **Focus** time counts fully.
+- **Prefocus** counts fully if it leads to focus, otherwise at half weight.
+- **Idle** time is excluded from the denominator (breaks don't penalize the score).
+- **Distraction** counts against you.
 
-- **Productivity ratio** = `(focus + prefocus × 0.5) / total tracked time`
-- **Hourly efficiency** = same ratio per clock hour, splitting buckets at hour boundaries
-- **Timeline** = contiguous segments merged by status, with gaps > 1 min shown as "untracked"
-- **Cross-day** — buckets straddling midnight are assigned to the start-time date; no session close-out logic
+The ratio is straightforward: `productive / active`. No streak bonuses or multipliers inflate it.
 
-## Key Configuration
+## Focus Streak
 
-| Constant | Value | Effect |
-|----------|-------|--------|
+Tracked separately as **longest consecutive focus run** (in minutes). This measures deep work capacity without distorting the productivity ratio. Streaks reset on any non-focus bucket (prefocus, distraction, or idle).
 
-| `BUCKET_SIZE_MINUTES` | 5 | Polling/analysis interval |
-| `SESSION_WINDOW_SIZE` | 6 | Recent buckets for context (30 min) |
-| `IDLE_THRESHOLD_PERCENTAGE` | 0.25 | Min active ratio to avoid idle (~75s in 5 min) |
-| `PREFOCUS_BUCKETS_REQUIRED` | 2 | Warm-up buckets before focus |
-| `MAX_DISTRACTION_BUCKETS` | 2 | Allowed interruptions before focus resets |
-| `PRODUCTIVE_SWITCHING_THRESHOLD` | 0.4 | Dominance ratio for "productive" |
-| `APP_SWITCHING_THRESHOLD` | 0.75 | Unique fingerprint ratio that triggers distraction |
-| `APP_SWITCHING_WINDOW_SIZE` | 4 | Buckets to check for switching |
-| `NEUTRAL_MAX_APP_COUNT` | 3 | Max apps for neutral (prefocus) instead of distraction |
-| `SWITCHING_TOP_N_APPS` | 2 | Top apps per bucket used in switching detection |
-| `WORK_SESSION_APP_THRESHOLD_PERCENTAGE` | 0.05 | Min app usage ratio (5%) to count toward work session app |
+## Work Session Tracking
 
-## Known Limitations
+The dominant app across recent focused intervals is tracked with recency weighting. This prevents switching between unrelated work sessions from being flagged as distraction within a single session.
 
-1. **App-blind classification** — No productive/unproductive app categories. 100% Reddit = 100% VS Code in terms of dominance ratio. Biggest accuracy gap.
-2. **Hardcoded thresholds** — All constants are compile-time; not user-configurable.
-3. **No cross-day/timezone handling** — No session close-out at midnight or timezone-aware bucketing.
+If multiple consecutive intervals are idle, the active subtask is automatically deactivated.
+
+## Limitations
+
+- **App-blind** — No productive/unproductive app categories. Reddit and VS Code are treated equally.
+- **Hardcoded thresholds** — Not user-configurable.
+- **No cross-day handling** — No session close-out at midnight.
