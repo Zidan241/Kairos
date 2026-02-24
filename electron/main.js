@@ -6,6 +6,11 @@ import { MenuManager } from './menuManager.js';
 import { settingsManager } from './settingsManager.js';
 import { logger } from './logger.js';
 
+// Handle Squirrel events for Windows installer (install/update/uninstall shortcuts).
+// Must run before anything else — quits the app immediately during installer phases.
+import electronSquirrelStartup from 'electron-squirrel-startup';
+if (electronSquirrelStartup) app.quit();
+
 // Keep references to main components
 let windowManager;
 let serverManager;
