@@ -52,7 +52,7 @@ export default function DayReport({ data, isLoading }: DayReportProps) {
       {/* Daily Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
-          [1, 2, 3, 4].map((i) => (
+          [1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-32 w-full" />
           ))
         ) : (
@@ -87,6 +87,7 @@ export default function DayReport({ data, isLoading }: DayReportProps) {
       </div>
 
       {/* Plan Execution & Top Apps — same grid as metrics above */}
+      {(hasPlanExecution || hasTopApps) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {hasPlanExecution && (
           <Card className={hasTopApps ? 'md:col-span-2' : 'md:col-span-2 lg:col-span-3'}>
@@ -159,6 +160,7 @@ export default function DayReport({ data, isLoading }: DayReportProps) {
           </Card>
         )}
       </div>
+      )}
 
       {/* Today's Activity Timeline */}
       {timelineData && <TimelineChart data={timelineData} />}

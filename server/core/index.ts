@@ -32,7 +32,11 @@ app.use(setupLoggingMiddleware());
   // - Compiled binary (Electron): skip — Electron loads the UI directly
   // - Development: setup Vite dev server for HMR
   // - Production from source: serve built client files
-  const isCompiled = import.meta.dirname?.startsWith('/$bunfs');
+  // Bun compiled binaries report virtual paths:
+  // - Unix:     /$bunfs/root/...
+  // - Windows:  B/~BUN/root/...
+  const dir = import.meta.dirname ?? '';
+  const isCompiled = dir.startsWith('/$bunfs') || dir.includes('~BUN');
   if (isCompiled) {
     // No-op: Electron's BrowserWindow loads the client
   } else if (app.get("env") === "development") {
