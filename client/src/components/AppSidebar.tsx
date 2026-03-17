@@ -1,4 +1,4 @@
-import { CircleDot, SlidersHorizontal, LayoutList, Sparkles } from "lucide-react";
+import { CircleDot, SlidersHorizontal, LayoutList, Sparkles, FileText } from "lucide-react";
 import { Link } from "wouter";
 import {
   Sidebar,
@@ -10,8 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import ConnectionIndicator from "@/components/ConnectionIndicator";
-import ActiveTaskIndicator from "@/components/ActiveTaskIndicator";
+import SidebarStatusAnimation from "@/components/SidebarStatusAnimation";
 
 const menuItems = [
   {
@@ -23,6 +22,11 @@ const menuItems = [
     title: "Plan",
     url: "/planning",
     icon: LayoutList,
+  },
+  {
+    title: "Notes",
+    url: "/notes",
+    icon: FileText,
   },
   {
     title: "Reflect",
@@ -58,9 +62,7 @@ export default function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="pb-6 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:pb-6">
-        <ActiveTaskIndicator />
-        <div className="w-full border-t border-border" />
-        <ConnectionIndicator />
+        <SidebarStatusAnimation />
       </SidebarFooter>
     </Sidebar>
   );

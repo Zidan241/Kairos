@@ -105,7 +105,9 @@ class WindowManager {
   }
   
   setupContentSecurityPolicy() {
-    // Apply CSP headers to all responses
+    // Skip CSP in dev mode — Vite needs full access for HMR
+    if (!app.isPackaged) return;
+
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       const csp = [
         "default-src 'self'",
@@ -128,6 +130,16 @@ class WindowManager {
   loadContent() {
     if (!this.mainWindow) return;
     
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    if (devUrl) {
+      logger.info(`Loading dev server at ${devUrl}`);
+      this.mainWindow.loadURL(devUrl).catch(err => {
+        logger.error('Failed to load dev server:', err);
+        this.loadFallbackContent();
+      });
+      return;
+    }
+
     this.mainWindow.loadFile(path.join(__dirname, '../dist/client/index.html')).catch(err => {
       logger.error('Failed to load built files:', err);
       this.loadFallbackContent();

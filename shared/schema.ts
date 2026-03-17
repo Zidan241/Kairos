@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -30,9 +30,11 @@ export const subtasks = sqliteTable("subtasks", {
   estimatedMinutes: integer().notNull().default(60), // Changed from 30 to 60 to match schema
   isCompleted: integer({ mode: "boolean" }).notNull().default(false),
   isActive: integer({ mode: "boolean" }).notNull().default(false),
+  activatedAt: text(), // ISO string — set when task becomes active, cleared on deactivation
   scheduledStartTime: integer(), // minutes from midnight (e.g., 480 = 8:00 AM)
   completedAt: text(), // ISO string
   scheduledDate: text(), // YYYY-MM-DD format
+  notes: text(), // Markdown notes content
   ...timestamps,
 });
 
@@ -42,6 +44,17 @@ export const taskScheduleHistory = sqliteTable("taskScheduleHistory", {
   subtaskId: integer().references(() => subtasks.id, { onDelete: "cascade" }).notNull(),
   scheduledDate: text(), // YYYY-MM-DD format
   createdAt: text().notNull().default(sql`(datetime('now'))`),
+});
+
+// Work sessions history table - tracks actual start/stop times for active subtasks
+export const workSessionsHistory = sqliteTable("workSessionsHistory", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  subtaskId: integer().references(() => subtasks.id, { onDelete: "cascade" }).notNull(),
+  startedAt: text().notNull(), // ISO string — when the session began
+  endedAt: text(), // ISO string — null while session is in progress
+  durationMinutes: real(), // Computed on end: (endedAt - startedAt) in minutes
+  date: text().notNull(), // YYYY-MM-DD — for efficient per-day queries
+  ...timestamps,
 });
 
 // Activity buckets table (5-minute classifications)
@@ -89,6 +102,7 @@ export const insertSubtaskSchema = createInsertSchema(subtasks, {
   createdAt: true,
   updatedAt: true,
   completedAt: true,
+  activatedAt: true,
 });
 
 // Update schemas for editing - only editable fields
@@ -119,6 +133,7 @@ export const updateSubtaskSchema = createInsertSchema(subtasks, {
   scheduledStartTime: true,
   scheduledDate: true,
 });
+// Note: activatedAt is managed internally by storage logic, not via API updates
 export const insertActivityBucketSchema = createInsertSchema(activityBuckets, {
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
@@ -138,6 +153,8 @@ export type InsertSubtask = typeof insertSubtaskSchema._type;
 export type UpdateSubtask = typeof updateSubtaskSchema._type;
 
 export type TaskScheduleHistory = typeof taskScheduleHistory.$inferSelect;
+
+export type WorkSessionHistory = typeof workSessionsHistory.$inferSelect;
 
 export type ActivityBucket = typeof activityBuckets.$inferSelect;
 export type InsertActivityBucket = typeof insertActivityBucketSchema._type;

@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { dialog } from 'electron';
+import { app, dialog } from 'electron';
 import path from 'path';
 import net from 'net';
 import http from 'http';
@@ -41,23 +41,32 @@ class ServerManager {
       this.serverPort = await this.findAvailablePort(DEFAULT_SERVER_PORT);
       logger.info(`Starting server on port ${this.serverPort}`);
 
-      // Resolve compiled server binary path
-      const command = path.join(process.resourcesPath, 'server' + (process.platform === 'win32' ? '.exe' : ''));
+      const isDev = !app.isPackaged;
 
+      // In dev mode the server is already running externally
+      if (isDev) {
+        this.serverPort = DEFAULT_SERVER_PORT;
+        logger.info(`Dev mode: using externally running server on port ${this.serverPort}`);
+        this.isServerReady = true;
+        return { port: this.serverPort, status: 'ready', pid: null };
+      }
+
+      // Production: use compiled server binary
+      const command = path.join(process.resourcesPath, 'server' + (process.platform === 'win32' ? '.exe' : ''));
       if (!fs.existsSync(command)) {
         throw new Error(`Server binary not found: ${command}`);
       }
-
-      this.serverProcess = spawn(command, [
+      const args = [
         '--db', this.databasePath || path.join(process.resourcesPath, 'kairo.db'),
         '--migrations', path.join(process.resourcesPath, 'migrations'),
         '--port', this.serverPort.toString(),
-      ], {
-        cwd: process.resourcesPath,
-        env: {
-          ...process.env,
-          NODE_ENV: 'production',
-        },
+      ];
+      const cwd = process.resourcesPath;
+      const env = { ...process.env, NODE_ENV: 'production' };
+
+      this.serverProcess = spawn(command, args, {
+        cwd,
+        env,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 

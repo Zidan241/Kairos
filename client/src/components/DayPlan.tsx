@@ -2,15 +2,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import TaskItem from "./TaskItem";
-import { useDayPlanTasks, useUpdateSubtask, useUpdateTask } from "@/hooks/useTasks";
-import { calculateMultipleTasksProgress } from "@/lib/taskUtils";
+import { NotesPanel } from "./NotesPanel";
+import { useDayPlanTasks, useUpdateSubtask } from "@/hooks/useTasks";
+import { calculateMultipleTasksElapsedProgress, getTodayWorkedMinutes } from "@/lib/taskUtils";
 import { type TaskWithMetrics } from "@shared/metrics";
 import { TaskHelpers } from "./utils/taskHelpers";
+import { useState } from "react";
+import { useElapsedMinutes } from "@/hooks/useElapsedTime";
 
-interface DayPlanProps {}
-
-export default function DayPlan(_props: DayPlanProps) {
+export default function DayPlan() {
   const { data: dayTasks = [], isLoading } = useDayPlanTasks();
+  const [notesSubtask, setNotesSubtask] = useState<{ id: number; title: string } | null>(null);
   
   const updateSubtaskMutation = useUpdateSubtask();
 
@@ -28,7 +30,11 @@ export default function DayPlan(_props: DayPlanProps) {
     });
   };
 
-  const dayProgress = calculateMultipleTasksProgress(dayTasks);
+  const activeSubtask = dayTasks.flatMap(t => t.subtasks ?? []).find(s => s.isActive);
+  const liveElapsed = useElapsedMinutes(activeSubtask?.activatedAt ?? null);
+
+  const dayProgress = calculateMultipleTasksElapsedProgress(dayTasks, liveElapsed);
+  const todayWorked = getTodayWorkedMinutes(dayTasks, liveElapsed);
 
   return (
     <Card className="h-full flex flex-col">
@@ -37,7 +43,7 @@ export default function DayPlan(_props: DayPlanProps) {
           <CardTitle>Today's Plan</CardTitle>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>
-              {dayTasks.length} tasks • <span className={TaskHelpers.getStatusColor(false, dayProgress.trackedMinutes > dayProgress.totalMinutes, dayProgress.progress)}>{TaskHelpers.formatTime(dayProgress.trackedMinutes)} / {TaskHelpers.formatTime(dayProgress.totalMinutes)}</span> • {Math.round(dayProgress.progress)}%
+              {todayWorked < dayProgress.workedMinutes && <>{TaskHelpers.formatTime(todayWorked)} today • </>}<span className={TaskHelpers.getStatusColor(false, dayProgress.workedMinutes > dayProgress.totalMinutes, dayProgress.progress)}>{TaskHelpers.formatTime(dayProgress.workedMinutes)} / {TaskHelpers.formatTime(dayProgress.totalMinutes)}</span>
             </span>
           </div>
         </div>
@@ -64,10 +70,19 @@ export default function DayPlan(_props: DayPlanProps) {
               task={task}
               onToggleSubtaskActive={handleToggleSubtaskActive}
               onToggleSubtaskComplete={handleToggleSubtaskComplete}
+              onOpenNotes={setNotesSubtask}
             />
           ))
         )}
       </CardContent>
+      {notesSubtask && (
+        <NotesPanel
+          open={!!notesSubtask}
+          onOpenChange={(open) => { if (!open) setNotesSubtask(null); }}
+          subtaskId={notesSubtask.id}
+          subtaskTitle={notesSubtask.title}
+        />
+      )}
     </Card>
   );
 }

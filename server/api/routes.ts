@@ -124,6 +124,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // -------------------------
+  // Notes
+  // -------------------------
+  apiRouter.get("/notes", asyncHandler(async (_req: any, res: any) => {
+    const list = await storage.getSubtasksWithNotes();
+    res.json(list);
+  }));
+
+  apiRouter.get("/subtasks/:id/notes", asyncHandler(async (req: any, res: any) => {
+    const notes = await storage.getNote(parseInt(req.params.id));
+    res.json({ notes });
+  }));
+
+  apiRouter.put("/subtasks/:id/notes", asyncHandler(async (req: any, res: any) => {
+    const { content } = req.body;
+    const saved = await storage.saveNote(parseInt(req.params.id), content ?? '');
+    if (!saved) {
+      return res.status(404).json({ error: "Subtask not found" });
+    }
+    res.json({ ok: true });
+  }));
+
+  // -------------------------
+  // Work Sessions
+  // -------------------------
+  apiRouter.get("/work-sessions/:date", asyncHandler(async (req: any, res: any) => {
+    const sessions = await storage.getWorkSessionsByDate(req.params.date);
+    res.json(sessions);
+  }));
+
+  apiRouter.get("/subtasks/:id/work-sessions", asyncHandler(async (req: any, res: any) => {
+    const sessions = await storage.getWorkSessionsBySubtask(parseInt(req.params.id));
+    res.json(sessions);
+  }));
+
+  // -------------------------
   // Metrics
   // -------------------------
   apiRouter.get("/metrics/daily", asyncHandler(async (req: any, res: any) => {

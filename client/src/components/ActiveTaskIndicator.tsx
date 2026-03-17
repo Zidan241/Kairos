@@ -1,46 +1,63 @@
-import { useQuery } from "@tanstack/react-query";
-import { subtasksApi } from "@/lib/api";
-import { useSidebar } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ACTIVITY_CONFIG } from "@shared/constants.js";
-import { PlayCircle, CircleDashed } from "lucide-react";
+import { useElapsedMinutes, formatElapsed } from "@/hooks/useElapsedTime";
+import { useActiveSubtask, useUpdateSubtask } from "@/hooks/useTasks";
+import { Square } from "lucide-react";
 
 export default function ActiveTaskIndicator() {
-  const { data: activeSubtask, isLoading } = useQuery({
-    queryKey: ['subtasks', 'active'],
-    queryFn: subtasksApi.getActive,
-    refetchInterval: ACTIVITY_CONFIG.METRICS_CACHE_TIME_MS,
-  });
-  const { state } = useSidebar();
-  const collapsed = state === "collapsed";
+  const { data: activeSubtask, isLoading } = useActiveSubtask();
+  const updateSubtask = useUpdateSubtask();
+  const elapsed = useElapsedMinutes(activeSubtask?.activatedAt);
 
   if (isLoading) return null;
 
   const hasActive = !!activeSubtask;
+  const timerText = hasActive ? formatElapsed(elapsed) : null;
   const label = hasActive ? activeSubtask.title : "No active task";
 
-  const Icon = hasActive ? PlayCircle : CircleDashed;
-  const iconClass = hasActive
-    ? "text-green-500 drop-shadow-[0_0_4px_rgba(34,197,94,0.6)]"
-    : "text-muted-foreground/40";
-
-  if (collapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex justify-center">
-            <Icon className={`size-4 shrink-0 ${iconClass}`} />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
-      </Tooltip>
-    );
-  }
+  const handleStop = () => {
+    if (!activeSubtask) return;
+    updateSubtask.mutate({ id: activeSubtask.id, updates: { isActive: false } });
+  };
 
   return (
-    <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
-      <Icon className={`size-4 shrink-0 ${iconClass}`} />
-      <span className="truncate">{label}</span>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={hasActive ? handleStop : undefined}
+          className={`flex items-center gap-2 px-2 h-8 rounded-md text-xs select-none group transition-colors ${
+            hasActive ? "cursor-pointer hover:bg-muted" : "cursor-default"
+          }`}
+        >
+          {/* Status dot / stop icon */}
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            {hasActive && (
+              <span className="absolute inset-0 rounded-full bg-green-500/40 animate-ping [animation-duration:5s]" />
+            )}
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+              hasActive ? "bg-green-500 group-hover:hidden" : "bg-muted-foreground/30"
+            }`} />
+            {hasActive && (
+              <Square className="relative hidden group-hover:inline-flex h-2.5 w-2.5 fill-red-500 text-red-500" />
+            )}
+          </span>
+
+          {hasActive ? (
+            <>
+              <span className="truncate max-w-[140px] text-foreground font-medium">
+                {label}
+              </span>
+              <span className="tabular-nums text-green-500 font-semibold shrink-0">
+                {timerText}
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground/50">Idle</span>
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {hasActive ? "Click to stop active task" : "No active task"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

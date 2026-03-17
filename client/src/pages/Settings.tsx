@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { ActivitySquare, Palette, Info, Database, RefreshCw, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useElectron, isElectron } from "@/hooks/useElectron";
-import { activityApi, databaseApi } from "@/lib/api";
+import { databaseApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useConnectionStatus } from "@/hooks/useConnectionStatus";
 
@@ -20,39 +20,7 @@ export default function Settings() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string | null>(null);
   const [dbInfo, setDbInfo] = useState<{ path: string; size: number; lastBackup: string | null } | null>(null);
-  const [isToggling, setIsToggling] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
-
-  const handleToggleConnection = async () => {
-    if (isToggling) return;
-    setIsToggling(true);
-
-    try {
-      if (activityWatchConnected) {
-        await activityApi.pause();
-        toast({
-          title: "Disconnected",
-          description: "ActivityWatch has been disconnected.",
-        });
-      } else {
-        await activityApi.resume();
-        toast({
-          title: "Connected",
-          description: "ActivityWatch is now connected and tracking.",
-        });
-      }
-      await refreshStatus();
-    } catch (e: any) {
-      const action = activityWatchConnected ? "disconnect from" : "connect to";
-      toast({
-        title: "Connection Failed",
-        description: `Could not ${action} ActivityWatch. ${e?.message || "Please try again."}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsToggling(false);
-    }
-  };
 
   const handleBackup = async () => {
     try {
@@ -77,9 +45,9 @@ export default function Settings() {
     try {
       await refreshStatus();
       if (activityWatchConnected) {
-        toast({ title: "ActivityWatch Detected", description: "ActivityWatch installation found." });
+        toast({ title: "ActivityWatch Detected", description: "ActivityWatch is running and connected." });
       } else {
-        toast({ title: "Not Found", description: "ActivityWatch was not detected. Please install it first.", variant: "destructive" });
+        toast({ title: "Not Running", description: "ActivityWatch is not running. Please start it and try again." });
       }
     } finally {
       setIsRechecking(false);
@@ -159,31 +127,21 @@ export default function Settings() {
             </div>
           )}
 
-          {/* Running or paused - show connection controls */}
+          {/* Running or paused - show status info */}
           {(!statusLoaded || activityWatchConnected || activityWatchPaused) && (
             <>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Connection Status</Label>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={activityWatchConnected ? "default" : "secondary"}>
-                      {activityWatchConnected ? "Connected" : activityWatchPaused ? "Paused" : "Disconnected"}
-                    </Badge>
-                    {!statusLoaded && !activityWatchPaused && (
-                      <span className="text-sm text-muted-foreground">
-                        Checking...
-                      </span>
-                    )}
-                  </div>
+              <div className="space-y-0.5">
+                <Label>Connection Status</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant={activityWatchConnected ? "default" : "secondary"}>
+                    {activityWatchConnected ? "Connected" : activityWatchPaused ? "Paused" : "Disconnected"}
+                  </Badge>
+                  {!statusLoaded && !activityWatchPaused && (
+                    <span className="text-sm text-muted-foreground">
+                      Checking...
+                    </span>
+                  )}
                 </div>
-                <Button
-                  variant={activityWatchConnected ? "outline" : "default"}
-                  disabled={!statusLoaded || isToggling}
-                  onClick={handleToggleConnection}
-                  data-testid="button-activitywatch-toggle"
-                >
-                  {activityWatchConnected ? "Disconnect" : activityWatchPaused ? "Reconnect" : "Connect"}
-                </Button>
               </div>
 
               <div className="space-y-1.5">

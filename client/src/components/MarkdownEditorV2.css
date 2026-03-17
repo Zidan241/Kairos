@@ -1,0 +1,36 @@
+/*
+ * Map Crepe CSS variables to the app's Tailwind CSS variables.
+ * This ensures the editor inherits the app theme in both light and dark mode.
+ * Per docs: https://milkdown.dev/docs/guide/styling#customizing-crepe-theme
+ */
+.milkdown {
+  --crepe-color-background: hsl(var(--background));
+  --crepe-color-on-background: hsl(var(--foreground));
+  --crepe-color-surface: hsl(var(--card));
+  --crepe-color-surface-low: hsl(var(--muted));
+  --crepe-color-on-surface: hsl(var(--card-foreground));
+  --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--border));
+  --crepe-color-primary: hsl(var(--primary));
+  --crepe-color-secondary: hsl(var(--secondary));
+  --crepe-color-on-secondary: hsl(var(--secondary-foreground));
+  --crepe-color-inverse: hsl(var(--accent));
+  --crepe-color-on-inverse: hsl(var(--accent-foreground));
+  --crepe-color-inline-code: hsl(var(--destructive));
+  --crepe-color-error: hsl(var(--destructive));
+  --crepe-color-hover: var(--elevate-1);
+  --crepe-color-selected: var(--elevate-2);
+  --crepe-color-inline-area: hsl(var(--muted));
+
+  --crepe-font-title: var(--font-serif);
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-code: var(--font-mono);
+
+  --crepe-shadow-1: var(--shadow-sm);
+  --crepe-shadow-2: var(--shadow-md);
+}
+
+/* Override Crepe's default full-page padding (60px 120px) for panel use */
+.milkdown .ProseMirror {
+  padding: 12px 16px;
+}

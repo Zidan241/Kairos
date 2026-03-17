@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, GripVertical, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useScheduledSubtasks, useUpdateSubtask } from "@/hooks/useTasks";
+import { useScheduledSubtasks, useUpdateSubtask, useWorkSessionsByDate } from "@/hooks/useTasks";
 import { dateUtils } from "@shared/utils";
 
 interface DayScheduleTimelineProps {
@@ -20,6 +20,9 @@ export default function DayScheduleTimeline({
 }: DayScheduleTimelineProps) {
   // Fetch scheduled subtasks for the date
   const { data: allScheduledSubtasks = [], isLoading } = useScheduledSubtasks(date);
+
+  // Fetch work sessions for the date (for overlay)
+  const { data: workSessions = [] } = useWorkSessionsByDate(date);
 
   // Filter out subtasks that don't have a scheduledStartTime
   const scheduledSubtasks = allScheduledSubtasks.filter(subtask => subtask.scheduledStartTime !== null);
@@ -180,6 +183,32 @@ export default function DayScheduleTimeline({
     };
   };
 
+  // Compute work session block positions
+  const getSessionBlocks = () => {
+    const timelineStart = startHour * 60;
+    const timelineEnd = endHour * 60;
+    const timelineHeight = timelineEnd - timelineStart;
+
+    return workSessions
+      .map((session) => {
+        const start = new Date(session.startedAt);
+        const end = session.endedAt ? new Date(session.endedAt) : new Date();
+        const startMin = start.getHours() * 60 + start.getMinutes();
+        const endMin = end.getHours() * 60 + end.getMinutes();
+
+        const clampedStart = Math.max(startMin, timelineStart);
+        const clampedEnd = Math.min(endMin, timelineEnd);
+        if (clampedEnd <= clampedStart) return null;
+
+        const top = ((clampedStart - timelineStart) / timelineHeight) * 100;
+        const height = ((clampedEnd - clampedStart) / timelineHeight) * 100;
+        return { top, height, id: session.id };
+      })
+      .filter(Boolean) as { top: number; height: number; id: number }[];
+  };
+
+  const sessionBlocks = getSessionBlocks();
+
 
 
   const handleRemoveFromSchedule = async (taskId: number) => {
@@ -325,7 +354,7 @@ export default function DayScheduleTimeline({
           {/* Timeline container - scrolls as one unit */}
           <div className="flex">
             {/* Time labels - show only on hour marks */}
-            <div className="w-20 bg-muted/20 border-r">
+            <div className="w-20 bg-muted/20 border-r relative">
               {timeSlots.map((slot, index) => (
                 <div
                   key={slot.time}
@@ -333,6 +362,14 @@ export default function DayScheduleTimeline({
                 >
                   {slot.isHour ? slot.label : ''}
                 </div>
+              ))}
+              {/* Work session bars on the right edge of time sidebar */}
+              {sessionBlocks.map((block) => (
+                <div
+                  key={`session-${block.id}`}
+                  className="absolute right-0 w-[3px] bg-green-500 rounded-full pointer-events-none z-20"
+                  style={{ top: `${block.top}%`, height: `${block.height}%` }}
+                />
               ))}
             </div>
 

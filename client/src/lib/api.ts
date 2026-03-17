@@ -1,10 +1,11 @@
 import { apiRequest } from '@/lib/queryClient';
 import { 
   type Task, type InsertTask, type Subtask, type UpdateSubtask, type InsertSubtask,
+  type WorkSessionHistory,
   UpdateTask
 } from '@shared/schema';
 import { 
-  type DailyMetrics, type DayReportMetrics, type TaskWithMetrics
+  type DailyMetrics, type DayReportMetrics, type TaskWithMetrics, type NoteListItem
 } from '@shared/metrics';
 
 // -------------------------
@@ -69,7 +70,29 @@ export const subtasksApi = {
   getScheduledForDate: async (date: string): Promise<Subtask[]> => {
     const res = await apiRequest('GET', `/api/subtasks/scheduled/${date}`);
     return res.json();
-  }
+  },
+  getNote: async (id: number): Promise<string | null> => {
+    const res = await apiRequest('GET', `/api/subtasks/${id}/notes`);
+    const data = await res.json();
+    return data.notes;
+  },
+  saveNote: async (id: number, content: string): Promise<void> => {
+    await apiRequest('PUT', `/api/subtasks/${id}/notes`, { content });
+  },
+  listNotes: async (): Promise<NoteListItem[]> => {
+    const res = await apiRequest('GET', '/api/notes');
+    return res.json();
+  },
+};
+
+// -------------------------
+// Work Sessions API
+// -------------------------
+export const workSessionsApi = {
+  getByDate: async (date: string): Promise<WorkSessionHistory[]> => {
+    const res = await apiRequest('GET', `/api/work-sessions/${date}`);
+    return res.json();
+  },
 };
 
 // -------------------------

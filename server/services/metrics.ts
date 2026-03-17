@@ -1,18 +1,18 @@
-import { 
+import {
   type DailyMetrics, type DayReportMetrics, type AppUsage, type TimeBreakdown,
   type ScheduleBreakdown, type SubtaskMetrics
 } from "@shared/metrics";
 import {
-  activityBuckets, subtasks, type ActivityBucket
+  activityBuckets, workSessionsHistory, subtasks, type ActivityBucket
 } from "@shared/schema";
 import { db } from "../core/database";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, asc, inArray } from "drizzle-orm";
 import { dateUtils } from "@shared/utils";
 
 type ActivityCategory = ActivityBucket['category'];
 
 export class MetricsService {
-  
+
   /**
    * Get complete metrics for multiple subtasks efficiently
    */
@@ -28,14 +28,14 @@ export class MetricsService {
       apps: activityBuckets.apps,
       date: activityBuckets.date,
     })
-    .from(activityBuckets)
-    .where(inArray(activityBuckets.subtaskId, subtaskIds))
-    .orderBy(activityBuckets.date, activityBuckets.startTime);
+      .from(activityBuckets)
+      .where(inArray(activityBuckets.subtaskId, subtaskIds))
+      .orderBy(activityBuckets.date, activityBuckets.startTime);
 
     // Group activity buckets by subtask and date
     const subtaskActivityMap = new Map<number, typeof activityResults>();
     const subtaskDateMap = new Map<number, Map<string, typeof activityResults>>();
-    
+
     for (const row of activityResults) {
       if (row.subtaskId) {
         // For overall time breakdown
@@ -43,7 +43,7 @@ export class MetricsService {
           subtaskActivityMap.set(row.subtaskId, []);
         }
         subtaskActivityMap.get(row.subtaskId)!.push(row);
-        
+
         // For schedule breakdown by date
         if (!subtaskDateMap.has(row.subtaskId)) {
           subtaskDateMap.set(row.subtaskId, new Map());
@@ -58,21 +58,21 @@ export class MetricsService {
 
     // Calculate complete metrics for each subtask
     const subtaskMetrics: Record<number, SubtaskMetrics> = {};
-    
+
     subtaskIds.forEach(subtaskId => {
       // Calculate overall time breakdown
       const allActivityBuckets = subtaskActivityMap.get(subtaskId) || [];
       const timeBreakdown = this.calculateTimeBreakdown(allActivityBuckets);
-      
+
       // Calculate schedule breakdown by date (derived from activity buckets)
       const scheduleBreakdown: ScheduleBreakdown[] = [];
       const dateMap = subtaskDateMap.get(subtaskId);
-      
+
       if (dateMap) {
         dateMap.forEach((buckets, date) => {
           const dateTimeBreakdown = this.calculateTimeBreakdown(buckets);
           const apps = this.calculateAppUsageForBuckets(buckets);
-          
+
           scheduleBreakdown.push({
             date,
             timeBreakdown: dateTimeBreakdown,
@@ -80,12 +80,26 @@ export class MetricsService {
           });
         });
       }
-      
+
       subtaskMetrics[subtaskId] = {
         timeBreakdown,
-        scheduleBreakdown: scheduleBreakdown.sort((a, b) => a.date.localeCompare(b.date))
+        scheduleBreakdown: scheduleBreakdown.sort((a, b) => a.date.localeCompare(b.date)),
+        workSessions: [],
       };
     });
+
+    // Populate work sessions
+    if (subtaskIds.length > 0) {
+      const sessions = await db.select().from(workSessionsHistory)
+        .where(inArray(workSessionsHistory.subtaskId, subtaskIds))
+        .orderBy(asc(workSessionsHistory.startedAt));
+
+      for (const session of sessions) {
+        if (subtaskMetrics[session.subtaskId]) {
+          subtaskMetrics[session.subtaskId].workSessions.push(session);
+        }
+      }
+    }
 
     return subtaskMetrics;
   }
@@ -101,14 +115,14 @@ export class MetricsService {
     let productiveMinutes = 0;
     let currentStreak = 0;
     let longestStreak = 0;
-    
+
     for (let i = 0; i < buckets.length; i++) {
       const bucket = buckets[i];
       // Calculate actual bucket duration in minutes
       const startTime = new Date(bucket.startTime);
       const endTime = new Date(bucket.endTime);
       const bucketMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60);
-      
+
       switch (bucket.category) {
         case 'focus':
           focusMinutes += bucketMinutes;
@@ -134,13 +148,13 @@ export class MetricsService {
           break;
       }
     }
-    
+
     const totalMinutes = focusMinutes + prefocusMinutes + idleMinutes + distractionMinutes;
     // Idle excluded from the denominator: productivity measures "when you were
     // at the keyboard, how focused were you?" Breaks shouldn't penalise the score.
     const activeMinutes = focusMinutes + prefocusMinutes + distractionMinutes;
     const productivityRatio = activeMinutes > 0 ? productiveMinutes / activeMinutes : 0;
-    
+
     return {
       totalMinutes,
       focusMinutes,
@@ -159,7 +173,7 @@ export class MetricsService {
     buckets: Array<{ apps: unknown }>
   ): AppUsage[] {
     const appUsageMap = new Map<string, number>();
-    
+
     for (const bucket of buckets) {
       if (bucket.apps) {
         const appsData = typeof bucket.apps === 'string' ? JSON.parse(bucket.apps) : bucket.apps;
@@ -446,7 +460,7 @@ export class MetricsService {
     }
 
     const timeBreakdown = this.calculateTimeBreakdown(buckets);
-    
+
     return {
       date,
       timeBreakdown
@@ -458,7 +472,7 @@ export class MetricsService {
    */
   async checkTaskTransition(): Promise<boolean> {
     const TASK_TRANSITION_BUCKETS_REQUIRED = 2;
-    
+
     // Fetch one extra bucket so we can confirm the app actually *changed*
     const recentBuckets = await db.select().from(activityBuckets)
       .orderBy(desc(activityBuckets.startTime))
@@ -467,7 +481,7 @@ export class MetricsService {
     if (recentBuckets.length < TASK_TRANSITION_BUCKETS_REQUIRED + 1) return false;
 
     const currentBucket = recentBuckets[0];
-    
+
     // Only focused/prefocused activity can be a task transition
     if (!['focus', 'prefocus'].includes(currentBucket.category)) {
       return false;

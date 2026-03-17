@@ -21,6 +21,17 @@
   height: calc(100svh - var(--titlebar-h, 2.25rem));
 }
 
+/* Offset Radix portals below the macOS title bar */
+html.macos-electron .fixed.inset-0[data-state] {
+  top: var(--titlebar-h, 2.25rem) !important;
+}
+html.macos-electron .fixed.inset-y-0[role="dialog"] {
+  top: var(--titlebar-h, 2.25rem) !important;
+  height: calc(100vh - var(--titlebar-h, 2.25rem)) !important;
+  bottom: auto !important;
+}
+
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -465,4 +476,24 @@
   .react-datepicker__navigation-icon::before {
     border-color: hsl(var(--foreground)) !important;
   }
+}
+
+/* Sidebar morphing blob animations */
+@keyframes blob-morph {
+  0%   { border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; }
+  25%  { border-radius: 60% 40% 30% 70% / 40% 60% 40% 60%; }
+  50%  { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+  75%  { border-radius: 60% 40% 50% 60% / 30% 70% 40% 60%; }
+  100% { border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; }
+}
+
+@keyframes blob-morph-idle {
+  0%   { border-radius: 45% 55% 55% 45% / 55% 45% 55% 45%; }
+  50%  { border-radius: 55% 45% 45% 55% / 45% 55% 45% 55%; }
+  100% { border-radius: 45% 55% 55% 45% / 55% 45% 55% 45%; }
+}
+
+@keyframes blob-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

@@ -1,61 +1,109 @@
-import { type TaskWithMetrics } from "@shared/metrics";
+import { type TaskWithMetrics, type SubtaskWithMetrics } from "@shared/metrics";
+import { dateUtils } from "@shared/utils";
 
-/**
- * Calculate progress for a single planning task
- * @param task Planning task with completion status, tracked time, estimated time, and optional subtasks
- * @returns Progress percentage (0-100)
- */
-
-interface TaskProgress {
+export interface TaskProgress {
   progress: number;
-  trackedMinutes: number;
+  workedMinutes: number;
   totalMinutes: number;
 }
 
-export function calculateTaskProgress(task: TaskWithMetrics): TaskProgress {
-  const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-
-  var totalTrackedMinutes = 0;
-  var totalMinutes = 0;
-  
-    const totalProgress = task.subtasks!.reduce((sum, subtask) => {
-      const trackedMinutes = subtask.metrics?.timeBreakdown?.totalMinutes || 0;
-      totalTrackedMinutes += trackedMinutes;
-      totalMinutes += subtask.estimatedMinutes;
-      if (subtask.isCompleted) {
-        return sum + 100;
-      } else {
-        // if estimated time <= tracked time then keep progress at 90 until mark subtask completed
-        const subtaskProgress = Math.min((trackedMinutes / subtask.estimatedMinutes) * 100, 90);
-        return sum + subtaskProgress;
-      }
-    }, 0);
-
-    return { progress: hasSubtasks ? totalProgress / task.subtasks!.length :  task.isCompleted ? 100 : 0, trackedMinutes: totalTrackedMinutes, totalMinutes };
+/** Get today's date as YYYY-MM-DD (local timezone, matches server). */
+export function getTodayDate(): string {
+  return dateUtils.getTodayDate();
 }
 
-/**
- * Calculate progress for multiple planning tasks (for daily progress)
- * @param tasks Array of planning tasks
- * @returns TaskProgress object with progress percentage, tracked minutes, and total minutes
- */
-export function calculateMultipleTasksProgress(tasks: TaskWithMetrics[]): TaskProgress {
-  if (tasks.length === 0) return { progress: 0, trackedMinutes: 0, totalMinutes: 0 };
-  
-  let totalProgress = 0;
-  let totalTrackedMinutes = 0;
-  let totalEstimatedMinutes = 0;
-  
-  tasks.forEach(task => {
-    const { progress, trackedMinutes, totalMinutes } = calculateTaskProgress(task);
-    totalProgress += progress;
-    totalTrackedMinutes += trackedMinutes;
-    totalEstimatedMinutes += totalMinutes;
-  });
-  
+/** Sum work session durations for a subtask, optionally filtered to a date. */
+export function getSessionMinutes(subtask: SubtaskWithMetrics, date?: string): number {
+  return (subtask.metrics?.workSessions ?? [])
+    .filter(s => !date || s.date === date)
+    .reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
+}
+
+// ---- Core weighted-progress algorithm ----
+
+/** Compute weighted progress for a task given a per-subtask "worked minutes" accessor. */
+function computeTaskProgress(
+  task: TaskWithMetrics,
+  getWorked: (sub: SubtaskWithMetrics) => number,
+): TaskProgress {
+  const subtasks = task.subtasks ?? [];
+  if (subtasks.length === 0) {
+    return { progress: task.isCompleted ? 100 : 0, workedMinutes: 0, totalMinutes: 0 };
+  }
+
+  let totalWorked = 0;
+  let totalEstimated = 0;
+  let weightedProgress = 0;
+
+  for (const subtask of subtasks) {
+    const worked = getWorked(subtask);
+    const est = subtask.estimatedMinutes;
+    totalWorked += worked;
+    totalEstimated += est;
+
+    if (subtask.isCompleted) {
+      weightedProgress += est * 100;
+    } else {
+      weightedProgress += est * (est > 0 ? Math.min((worked / est) * 100, 90) : 0);
+    }
+  }
+
   return {
-    progress: totalProgress / tasks.length,
-    trackedMinutes: totalTrackedMinutes,
-    totalMinutes: totalEstimatedMinutes
+    progress: task.isCompleted ? 100 : totalEstimated > 0 ? weightedProgress / totalEstimated : 0,
+    workedMinutes: totalWorked,
+    totalMinutes: totalEstimated,
   };
+}
+
+/** Aggregate progress across multiple tasks. */
+function aggregateProgress(tasks: TaskWithMetrics[], perTask: (t: TaskWithMetrics) => TaskProgress): TaskProgress {
+  if (tasks.length === 0) return { progress: 0, workedMinutes: 0, totalMinutes: 0 };
+
+  let wp = 0, worked = 0, estimated = 0;
+  for (const task of tasks) {
+    const p = perTask(task);
+    wp += p.totalMinutes * p.progress;
+    worked += p.workedMinutes;
+    estimated += p.totalMinutes;
+  }
+  return {
+    progress: estimated > 0 ? wp / estimated : 0,
+    workedMinutes: worked,
+    totalMinutes: estimated,
+  };
+}
+
+// ---- Tracked time (ActivityWatch) — Planning page & Reports ----
+
+export function calculateTaskProgress(task: TaskWithMetrics): TaskProgress {
+  return computeTaskProgress(task, sub => sub.metrics?.timeBreakdown?.totalMinutes ?? 0);
+}
+
+export function calculateMultipleTasksProgress(tasks: TaskWithMetrics[]): TaskProgress {
+  return aggregateProgress(tasks, calculateTaskProgress);
+}
+
+// ---- Elapsed time (work sessions) — Focus page ----
+
+export function calculateTaskElapsedProgress(task: TaskWithMetrics, liveElapsedMinutes = 0): TaskProgress {
+  return computeTaskProgress(task, sub =>
+    getSessionMinutes(sub) + (sub.isActive ? liveElapsedMinutes : 0)
+  );
+}
+
+export function calculateMultipleTasksElapsedProgress(tasks: TaskWithMetrics[], liveElapsedMinutes = 0): TaskProgress {
+  return aggregateProgress(tasks, t => calculateTaskElapsedProgress(t, liveElapsedMinutes));
+}
+
+/** Sum today's worked minutes across all tasks (for "Xm today" display). */
+export function getTodayWorkedMinutes(tasks: TaskWithMetrics[], liveElapsedMinutes = 0): number {
+  const today = getTodayDate();
+  let total = 0;
+  for (const task of tasks) {
+    for (const sub of task.subtasks ?? []) {
+      total += getSessionMinutes(sub, today);
+      if (sub.isActive) total += liveElapsedMinutes;
+    }
+  }
+  return total;
 }

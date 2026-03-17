@@ -18,20 +18,21 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
-  Clock,
   Calendar,
-  AlertTriangle,
   Check,
   MoreHorizontal,
   Edit,
   Trash,
   X,
-  CalendarCheck,
   CalendarPlus,
+  Clock,
+  FileText,
 } from "lucide-react";
 import { SubtaskWithMetrics, type TaskWithMetrics } from "@shared/metrics";
-import { calculateTaskProgress } from "@/lib/taskUtils";
+import { calculateTaskElapsedProgress, getSessionMinutes } from "@/lib/taskUtils";
 import { TaskHelpers } from "@/components/utils/taskHelpers";
+import { NotesPanel } from "@/components/NotesPanel";
+import { useState } from "react";
 
 interface TaskCardProps {
   task: TaskWithMetrics;
@@ -56,13 +57,14 @@ export default function TaskCard({
   handleDeleteSubtask,
   handleToggleDayPlan,
 }: TaskCardProps) {
+  const [notesSubtask, setNotesSubtask] = useState<SubtaskWithMetrics | null>(null);
   const priority = TaskHelpers.getTaskPriority(task.priority);
   const deadline = TaskHelpers.getTaskDeadlineUrgency(task.dueDate);
   const isOverdue = TaskHelpers.isOverdue(task.isCompleted, task.dueDate);
   const hasSubtasks = task.subtasks && task.subtasks.length > 0;
   
-  // Calculate progress using utility function
-  const progress = calculateTaskProgress(task);
+  // Calculate progress using elapsed (work session) time
+  const progress = calculateTaskElapsedProgress(task);
   
   // Determine card styling based on task state
   const isEmptyTask = !hasSubtasks && !task.isCompleted;
@@ -98,13 +100,13 @@ export default function TaskCard({
                 </p>
               )}
               <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <Clock className={`h-3 w-3 ${TaskHelpers.getStatusColor(task.isCompleted, progress.trackedMinutes > progress.totalMinutes, progress.progress)}`} />
+                <div className="flex items-center gap-1" title="Work session time">
+                  <Clock className={`h-3 w-3 ${TaskHelpers.getStatusColor(task.isCompleted, progress.workedMinutes > progress.totalMinutes, progress.progress)}`} />
                   <span 
                     data-testid={`task-time-${task.id}`}
-                    className={TaskHelpers.getStatusColor(task.isCompleted,  progress.trackedMinutes > progress.totalMinutes, progress.progress)}
+                    className={TaskHelpers.getStatusColor(task.isCompleted, progress.workedMinutes > progress.totalMinutes, progress.progress)}
                   >
-                    {TaskHelpers.formatTime(isEmptyTask ? 0 : progress.trackedMinutes)} / {TaskHelpers.formatTime(progress.totalMinutes)}
+                    {TaskHelpers.formatTime(isEmptyTask ? 0 : progress.workedMinutes)} / {TaskHelpers.formatTime(progress.totalMinutes)}
                   </span>
                 </div>
                 {task.dueDate && (
@@ -245,18 +247,38 @@ export default function TaskCard({
                           }`}>
                             {subtask.title}
                           </span>
+                          {subtask.description && (
+                            <p className={`text-xs text-muted-foreground mb-1 break-words ${subtask.isCompleted ? "line-through" : ""}`}>
+                              {subtask.description}
+                            </p>
+                          )}
                           <div className="flex items-center gap-3">
-                            <span className={`text-xs ${TaskHelpers.getStatusColor(subtask.isCompleted, subtask.metrics.timeBreakdown.totalMinutes > subtask.estimatedMinutes, (subtask.metrics.timeBreakdown.totalMinutes / subtask.estimatedMinutes) * 100)}`}>
-                              {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.totalMinutes)} / {TaskHelpers.formatTime(subtask.estimatedMinutes)}
+                            {(() => {
+                              const worked = getSessionMinutes(subtask);
+                              const est = subtask.estimatedMinutes;
+                              const pct = (worked / est) * 100;
+                              return (
+                                <span className="text-xs flex items-center gap-1" title="Work session time">
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
+                                  <span className={TaskHelpers.getStatusColor(subtask.isCompleted, worked > est, pct)}>
+                                    {TaskHelpers.formatTime(worked)} / {TaskHelpers.formatTime(est)}
+                                  </span>
+                                </span>
+                              );
+                            })()}
+                            <span className="text-muted-foreground/40">•</span>
+                            <span className="text-xs flex items-center gap-1" title="ActivityWatch tracked time">
+                              <span className="text-muted-foreground">{TaskHelpers.formatTime(subtask.metrics.timeBreakdown.totalMinutes)} tracked</span>
                             </span>
                           </div>
                         </div>
                         
                         {/* Subtask action buttons - only show if parent task is not completed */}
                         {!isParentCompleted && (
-                          <div className="flex items-center justify-end gap-1 w-[160px]">
+                          <div className="flex items-center justify-end gap-1">
                               {/* Today toggle button for subtask - only show if subtask and parent task not completed */}
                               {!subtask.isCompleted && !task.isCompleted && (
+                                <>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -280,11 +302,20 @@ export default function TaskCard({
                                     </>
                                   )}
                                 </Button>
+                                <div className="h-4 w-px bg-border mx-1" />
+                                </>
                               )}
-                              
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setNotesSubtask(subtask)}
+                                title="Notes"
+                              >
+                                <FileText className="h-3 w-3" />
+                              </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" data-testid={`button-menu-subtask-${subtask.id}`}>
+                                  <Button variant="ghost" size="icon" data-testid={`button-menu-subtask-${subtask.id}`}>
                                     <MoreHorizontal className="h-3 w-3" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -306,7 +337,7 @@ export default function TaskCard({
                       </div>
                       
                       {/* App Time Breakdown Accordion - Daily Breakdown */}
-                      {subtask.metrics.scheduleBreakdown.length > 0 && subtask.metrics.scheduleBreakdown.some(sb => sb.apps && sb.apps.length > 0) && (
+                      {(subtask.metrics.scheduleBreakdown.length > 0 || (subtask.metrics?.workSessions ?? []).length > 0) && (
                         <div className="mt-3 mr-3">
                           <Accordion type="single" collapsible>
                             <AccordionItem value={`apps-${subtask.id}`} className="border-none">
@@ -320,12 +351,12 @@ export default function TaskCard({
                                     <div className="text-muted-foreground">
                                       <span className="font-medium">Productivity: </span>
                                       <span className="font-bold">
-                                        {Math.round(subtask.metrics.timeBreakdown.productivityRatio * 100)}%
+                                        {subtask.metrics.timeBreakdown.totalMinutes > 0
+                                          ? `${Math.round(subtask.metrics.timeBreakdown.productivityRatio * 100)}%`
+                                          : '–'}
                                       </span>
                                     </div>
                                     <div className="flex gap-3 text-xs text-muted-foreground">
-                                      <span className="font-medium">Total: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.totalMinutes)}</span>
-                                      <span >•</span>
                                       <span>Focus: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.focusMinutes)}</span>
                                       <span>Distraction: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.distractionMinutes)}</span>
                                       <span>Idle: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.idleMinutes)}</span>
@@ -334,25 +365,45 @@ export default function TaskCard({
                                 </div>
                                 
                                 <div className="space-y-3">
-                                  {subtask.metrics.scheduleBreakdown
-                                    .filter(sb => sb.apps && sb.apps.length > 0)
-                                    .map((dailyBreakdown) => (
-                                      <div key={dailyBreakdown.date} className="border rounded-md p-3 bg-background/30">
+                                  {(() => {
+                                    // Merge dates from schedule breakdowns and work sessions
+                                    const scheduleByDate: Record<string, typeof subtask.metrics.scheduleBreakdown[0]> = {};
+                                    for (const sb of subtask.metrics.scheduleBreakdown) {
+                                      scheduleByDate[sb.date] = sb;
+                                    }
+                                    const dateSet: Record<string, true> = {};
+                                    for (const d of Object.keys(scheduleByDate)) dateSet[d] = true;
+                                    for (const s of subtask.metrics?.workSessions ?? []) dateSet[s.date] = true;
+                                    const allDates = Object.keys(dateSet).sort();
+
+                                    return allDates.map((date) => {
+                                      const breakdown = scheduleByDate[date];
+                                      const dayWorked = getSessionMinutes(subtask, date);
+                                      const tracked = breakdown?.timeBreakdown.totalMinutes ?? 0;
+                                      return (
+                                      <div key={date} className="border rounded-md p-3 bg-background/30">
                                         <div className="flex justify-between items-center mb-2">
                                           <span className="text-sm font-medium text-muted-foreground">
-                                            {new Date(dailyBreakdown.date).toLocaleDateString()}
+                                            {new Date(date).toLocaleDateString()}
                                           </span>
                                           <div className="flex gap-3 text-xs text-muted-foreground">
-                                            <span className="font-medium">Total: {TaskHelpers.formatTime(dailyBreakdown.timeBreakdown.totalMinutes)}</span>
+                                            <span className="font-medium">{TaskHelpers.formatTime(dayWorked)}</span>
                                             <span>•</span>
-                                            <span>Focus: {TaskHelpers.formatTime(dailyBreakdown.timeBreakdown.focusMinutes)}</span>
-                                            <span>Distraction: {TaskHelpers.formatTime(dailyBreakdown.timeBreakdown.distractionMinutes)}</span>
-                                            <span>Idle: {TaskHelpers.formatTime(dailyBreakdown.timeBreakdown.idleMinutes)}</span>
+                                            <span className="font-medium">Tracked: {TaskHelpers.formatTime(tracked)}</span>
+                                            {breakdown && tracked > 0 && (
+                                              <>
+                                                <span>•</span>
+                                                <span>Focus: {TaskHelpers.formatTime(breakdown.timeBreakdown.focusMinutes)}</span>
+                                                <span>Distraction: {TaskHelpers.formatTime(breakdown.timeBreakdown.distractionMinutes)}</span>
+                                                <span>Idle: {TaskHelpers.formatTime(breakdown.timeBreakdown.idleMinutes)}</span>
+                                              </>
+                                            )}
                                           </div>
                                         </div>
+                                        {breakdown && breakdown.apps && breakdown.apps.length > 0 && (
                                         <div className="space-y-1">
-                                          {TaskHelpers.groupAppsByUsage(dailyBreakdown.apps).map((app, index) => (
-                                              <div key={`${dailyBreakdown.date}-${app.app}-${index}`} className="flex justify-between p-2 rounded-md bg-background/50 border">
+                                          {TaskHelpers.groupAppsByUsage(breakdown.apps).map((app, index) => (
+                                              <div key={`${date}-${app.app}-${index}`} className="flex justify-between p-2 rounded-md bg-background/50 border">
                                                 <span className="text-sm font-medium">{app.app}</span>
                                                 <div className="flex gap-3">
                                                   <span className="text-sm text-muted-foreground">
@@ -365,8 +416,11 @@ export default function TaskCard({
                                               </div>
                                             ))}
                                         </div>
+                                        )}
                                       </div>
-                                    ))}
+                                    );
+                                    });
+                                  })()}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>
@@ -396,6 +450,14 @@ export default function TaskCard({
           </>
         )}
       </CardContent>
+      {notesSubtask && (
+        <NotesPanel
+          open={!!notesSubtask}
+          onOpenChange={(open) => { if (!open) setNotesSubtask(null); }}
+          subtaskId={notesSubtask.id}
+          subtaskTitle={notesSubtask.title}
+        />
+      )}
     </Card>
   );
 }

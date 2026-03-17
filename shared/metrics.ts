@@ -1,4 +1,4 @@
-import { Subtask, Task } from "./schema";
+import { Subtask, Task, WorkSessionHistory } from "./schema";
 
 // ----------------------------
 // Core metric building blocks
@@ -33,6 +33,7 @@ export interface ScheduleBreakdown {
 export interface SubtaskMetrics {
   timeBreakdown: TimeBreakdown;
   scheduleBreakdown: ScheduleBreakdown[];
+  workSessions: WorkSessionHistory[];
 }
 
 export interface SubtaskWithMetrics extends Subtask {
@@ -79,4 +80,15 @@ export interface DayReportMetrics {
   }>;
   planExecution: PlanExecution;
   topApps: AppUsage[];
+}
+
+// ----------------------------
+// Notes
+// ----------------------------
+
+export interface NoteListItem {
+  id: number;
+  title: string;
+  parentTaskTitle: string;
+  updatedAt: string;
 }

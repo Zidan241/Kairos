@@ -1,7 +1,7 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,21 +10,30 @@ import ThemeToggle from "@/components/ThemeToggle";
 import Onboarding from "@/components/Onboarding";
 import Home from "@/pages/Home";
 import Planning from "@/pages/Planning";
+import Notes from "@/pages/Notes";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { isElectron } from "@/hooks/useElectron";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import TrackingStatus from "@/components/TrackingStatus";
+import ActiveTaskIndicator from "@/components/ActiveTaskIndicator";
 
 const isMacElectron = isElectron() && navigator.platform.toLowerCase().includes('mac');
 const ONBOARDING_COMPLETE_KEY = "kairos_onboarding_complete";
+
+// Mark <html> for macOS Electron so global CSS can offset portaled overlays
+if (isMacElectron) document.documentElement.classList.add('macos-electron');
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/planning" component={Planning} />
+      <Route path="/notes" component={Notes} />
       <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
@@ -91,7 +100,13 @@ export default function App() {
                     <SidebarTrigger data-testid="button-sidebar-toggle" />
                     <h1 className="text-lg font-bold font-brand tracking-tight text-foreground">Kairos</h1>
                   </div>
-                  <div className="flex items-center gap-4 no-drag">
+                  <div className="flex items-center gap-1 no-drag">
+                    <ActiveTaskIndicator />
+                    <div className="h-4 w-px bg-border" />
+                    <TrackingStatus />
+                    <div className="h-4 w-px bg-border" />
+                    <RefreshButton />
+                    <div className="h-4 w-px bg-border" />
                     <ThemeToggle />
                   </div>
                 </header>
@@ -107,5 +122,21 @@ export default function App() {
     </QueryClientProvider>
     </WouterRouter>
     </ErrorBoundary>
+  );
+}
+
+function RefreshButton() {
+  const qc = useQueryClient();
+  const [spinning, setSpinning] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setSpinning(true);
+    qc.invalidateQueries().then(() => setTimeout(() => setSpinning(false), 400));
+  }, [qc]);
+
+  return (
+    <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh data">
+      <RefreshCw className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} />
+    </Button>
   );
 }

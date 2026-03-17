@@ -2,7 +2,8 @@ import {
   type Task, type InsertTask, type UpdateTask,
   type Subtask, type InsertSubtask,
   type ActivityBucket, type InsertActivityBucket,
-  tasks, subtasks, activityBuckets,
+  type WorkSessionHistory,
+  tasks, subtasks, activityBuckets, workSessionsHistory,
   UpdateSubtask,
   taskScheduleHistory
 } from "@shared/schema";
@@ -11,7 +12,7 @@ import {
   buildTaskHierarchyWithMetrics,
 } from "../utils/taskMappers";
 import { db } from "../core/database";
-import { eq, desc, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import { metricsService } from "./metrics";
 import { dateUtils } from "@shared/utils";
 
@@ -41,6 +42,11 @@ export class SQLiteStorage {
   }
 
   async deleteTask(id: number): Promise<boolean> {
+    // End work session if any subtask under this task is active (cascade will delete subtasks)
+    const active = await this.getActiveSubtask();
+    if (active && active.parentTaskId === id) {
+      await this.deactivate();
+    }
     const result = await db.delete(tasks).where(eq(tasks.id, id)) as any;
     return result.changes > 0;
   }
@@ -56,12 +62,13 @@ export class SQLiteStorage {
 
   async updateSubtask(id: number, updates: Partial<UpdateSubtask>): Promise<Subtask | undefined> {
     // Handle completion status - when marking as completed, set isActive to false and completedAt timestamp
-    const finalUpdates = { ...updates };
+    const finalUpdates: Partial<UpdateSubtask> & { activatedAt?: string | null } = { ...updates };
     let completedAt;
+    const now = new Date().toISOString();
     
     if (updates.isCompleted === true) {
       finalUpdates.isActive = false;
-      completedAt = new Date().toISOString();
+      completedAt = now;
     } else if (updates.isCompleted === false) {
       // If unmarking as completed, clear the completedAt timestamp
       completedAt = null;
@@ -69,21 +76,28 @@ export class SQLiteStorage {
 
     // Handle isActive field - if setting a subtask to active, clear other active subtasks first
     if (finalUpdates.isActive === true) {
-      await db.update(subtasks).set({ isActive: false }).where(eq(subtasks.isActive, true));
+      await this.activate(id, now);
+      finalUpdates.activatedAt = now;
     }
 
-    // When rescheduling, reset active state so the task doesn't carry over as active
-    if (finalUpdates.scheduledDate !== undefined) {
+    // Deactivation: explicit toggle, completion, or reschedule
+    // Only end work session if THIS subtask is currently active (avoid ending another subtask's session)
+    if (finalUpdates.isActive === false || (finalUpdates.scheduledDate !== undefined && finalUpdates.isActive !== true)) {
+      const active = await this.getActiveSubtask();
+      if (active?.id === id) {
+        await this.deactivate();
+      }
       finalUpdates.isActive = false;
+      finalUpdates.activatedAt = null;
     }
 
-    // Handle schedule history
-    if(finalUpdates.scheduledDate !== undefined){
-      try{
+    // Record schedule history
+    if (finalUpdates.scheduledDate !== undefined) {
+      try {
         await db.insert(taskScheduleHistory).values({
           subtaskId: id,
           scheduledDate: finalUpdates.scheduledDate,
-          createdAt: new Date().toISOString()
+          createdAt: now
         });
       } catch (error) {
         console.error('Failed to create task schedule history:', error);
@@ -92,15 +106,50 @@ export class SQLiteStorage {
     }
 
     const result = await db.update(subtasks)
-      .set({ ...finalUpdates, updatedAt: new Date().toISOString() , completedAt })
+      .set({ ...finalUpdates, updatedAt: now, completedAt })
       .where(eq(subtasks.id, id))
       .returning() as Subtask[];
     return result[0];
   }
 
   async deleteSubtask(id: number): Promise<boolean> {
+    // End work session if this subtask is active
+    const active = await this.getActiveSubtask();
+    if (active?.id === id) {
+      await this.deactivate();
+    }
     const result = await db.delete(subtasks).where(eq(subtasks.id, id)) as any;
     return result.changes > 0;
+  }
+
+  // -------------------------
+  // Notes
+  // -------------------------
+  async getNote(subtaskId: number): Promise<string | null> {
+    const result = await db.select({ notes: subtasks.notes }).from(subtasks).where(eq(subtasks.id, subtaskId)).limit(1);
+    return result[0]?.notes ?? null;
+  }
+
+  async saveNote(subtaskId: number, content: string): Promise<boolean> {
+    const result = await db.update(subtasks)
+      .set({ notes: content ?? null, updatedAt: new Date().toISOString() })
+      .where(eq(subtasks.id, subtaskId)) as any;
+    return result.changes > 0;
+  }
+
+  async getSubtasksWithNotes(): Promise<{ id: number; title: string; parentTaskTitle: string; updatedAt: string }[]> {
+    const rows = await db
+      .select({
+        id: subtasks.id,
+        title: subtasks.title,
+        parentTaskTitle: tasks.title,
+        updatedAt: subtasks.updatedAt,
+      })
+      .from(subtasks)
+      .innerJoin(tasks, eq(subtasks.parentTaskId, tasks.id))
+      .where(isNotNull(subtasks.notes))
+      .orderBy(desc(subtasks.updatedAt));
+    return rows;
   }
 
   async getActiveSubtask(): Promise<Subtask | undefined> {
@@ -111,7 +160,8 @@ export class SQLiteStorage {
     // Auto-deactivate if scheduled for a previous day
     const today = dateUtils.getTodayDate();
     if (active.scheduledDate && active.scheduledDate < today) {
-      await db.update(subtasks).set({ isActive: false }).where(eq(subtasks.id, active.id));
+      await this.deactivate();
+      await db.update(subtasks).set({ isActive: false, activatedAt: null, updatedAt: new Date().toISOString() }).where(eq(subtasks.id, active.id));
       return undefined;
     }
 
@@ -123,7 +173,61 @@ export class SQLiteStorage {
       .from(subtasks)
       .where(eq(subtasks.scheduledDate, date))
   }  
-  
+
+  // -------------------------
+  // Activation helpers
+  // -------------------------
+  private async activate(subtaskId: number, now: string): Promise<void> {
+    await this.endCurrentWorkSession(now);
+    await db.update(subtasks).set({ isActive: false, activatedAt: null, updatedAt: now }).where(eq(subtasks.isActive, true));
+    await this.startWorkSession(subtaskId, now);
+  }
+
+  private async deactivate(): Promise<void> {
+    await this.endCurrentWorkSession(new Date().toISOString());
+  }
+
+  // -------------------------
+  // Work session operations
+  // -------------------------
+  private async startWorkSession(subtaskId: number, now: string): Promise<void> {
+    const today = dateUtils.getTodayDate();
+    await db.insert(workSessionsHistory).values({
+      subtaskId,
+      startedAt: now,
+      date: today,
+    });
+  }
+
+  private async endCurrentWorkSession(now: string): Promise<void> {
+    // There should only be one open session at a time (single active subtask invariant)
+    const openSession = await db.select().from(workSessionsHistory)
+      .where(isNull(workSessionsHistory.endedAt))
+      .limit(1);
+
+    if (openSession[0]) {
+      const startMs = new Date(openSession[0].startedAt).getTime();
+      const endMs = new Date(now).getTime();
+      const durationMinutes = Math.max(0, (endMs - startMs) / 60000);
+
+      await db.update(workSessionsHistory)
+        .set({ endedAt: now, durationMinutes, updatedAt: now })
+        .where(eq(workSessionsHistory.id, openSession[0].id));
+    }
+  }
+
+  async getWorkSessionsByDate(date: string): Promise<WorkSessionHistory[]> {
+    return await db.select().from(workSessionsHistory)
+      .where(eq(workSessionsHistory.date, date))
+      .orderBy(asc(workSessionsHistory.startedAt));
+  }
+
+  async getWorkSessionsBySubtask(subtaskId: number): Promise<WorkSessionHistory[]> {
+    return await db.select().from(workSessionsHistory)
+      .where(eq(workSessionsHistory.subtaskId, subtaskId))
+      .orderBy(asc(workSessionsHistory.startedAt));
+  }
+
   // -------------------------
   // Activity bucket operations
   // -------------------------
@@ -234,6 +338,8 @@ export class SQLiteStorage {
     // Use the hierarchy builder to create TaskWithMetrics for scheduled items
     return buildTaskHierarchyWithMetrics(parentTasks, scheduledSubtasks, subtaskMetrics, today);
   }
+
+
 }
 
 // Export a singleton instance

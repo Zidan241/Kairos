@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, subtasksApi } from "@/lib/api";
-import { type InsertTask, type Subtask, type InsertSubtask, type UpdateSubtask, UpdateTask } from "@shared/schema";
+import { tasksApi, subtasksApi, workSessionsApi } from "@/lib/api";
+import { type InsertTask, type Subtask, type InsertSubtask, type UpdateSubtask, type WorkSessionHistory, UpdateTask } from "@shared/schema";
 import { ACTIVITY_CONFIG } from "@shared/constants.js";
 import { TaskWithMetrics } from "@shared/metrics";
 import { dateUtils } from "@shared/utils";
@@ -34,6 +34,32 @@ export function useScheduledSubtasks(date?: string) {
   });
 }
 
+export function useWorkSessionsByDate(date?: string) {
+  const targetDate = date || dateUtils.getTodayDate();
+  return useQuery<WorkSessionHistory[]>({
+    queryKey: ['work-sessions', targetDate],
+    queryFn: () => workSessionsApi.getByDate(targetDate),
+    staleTime: ACTIVITY_CONFIG.METRICS_CACHE_TIME_MS,
+  });
+}
+
+export function useActiveSubtask() {
+  return useQuery<Subtask | null>({
+    queryKey: ['subtasks', 'active'],
+    queryFn: subtasksApi.getActive,
+    refetchInterval: ACTIVITY_CONFIG.METRICS_CACHE_TIME_MS,
+  });
+}
+
+// Invalidate all data queries that could be affected by task/subtask changes
+function invalidateAll(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+  queryClient.invalidateQueries({ queryKey: ['work-sessions'] });
+  queryClient.invalidateQueries({ queryKey: ['notes-list'] });
+  queryClient.invalidateQueries({ queryKey: ['metrics'] });
+}
+
 // ------------------------------------------------
 // TASK MUTATION HOOKS - For modifying tasks
 // ------------------------------------------------
@@ -43,10 +69,7 @@ export function useCreateTask() {
   
   return useMutation({
     mutationFn: (task: InsertTask) => tasksApi.create(task),
-    onSuccess: () => {
-      // Simple: invalidate all task queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }
 
@@ -56,10 +79,7 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: number; updates: Partial<UpdateTask> }) => 
       tasksApi.update(id, updates),
-    onSuccess: () => {
-      // Simple: invalidate all task queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }
 
@@ -68,12 +88,7 @@ export function useDeleteTask() {
   
   return useMutation({
     mutationFn: (id: number) => tasksApi.delete(id),
-    onSuccess: () => {
-      // Simple: invalidate all task queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      // Also invalidate metrics since deleting a task could affect aggregated metrics
-      queryClient.invalidateQueries({ queryKey: ['metrics'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }
 
@@ -86,11 +101,7 @@ export function useCreateSubtask() {
   
   return useMutation({
     mutationFn: (subtask: InsertSubtask) => subtasksApi.create(subtask),
-    onSuccess: () => {
-      // Simple: just invalidate what might be affected
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }
 
@@ -100,11 +111,7 @@ export function useUpdateSubtask() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: number; updates: Partial<UpdateSubtask> }) => 
       subtasksApi.update(id, updates),
-    onSuccess: () => {
-      // Simple: invalidate all related queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }
 
@@ -113,10 +120,6 @@ export function useDeleteSubtask() {
   
   return useMutation({
     mutationFn: (id: number) => subtasksApi.delete(id),
-    onSuccess: () => {
-      // Simple: invalidate all related queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-    },
+    onSuccess: () => invalidateAll(queryClient),
   });
 }

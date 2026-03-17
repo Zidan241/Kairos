@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 
 import DayReport from "@/components/reports/DayReport";
 import DateRangeSelector from "@/components/DateRangeSelector";
@@ -80,6 +80,13 @@ export default function Reports() {
             disabled={dayFetching}
           >
             <RefreshCw className={`h-4 w-4 ${dayFetching ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setSelectedDate(new Date())}
+            disabled={isToday(selectedDate)}
+          >
+            Today
           </Button>
           <Popover>
             <PopoverTrigger asChild>
