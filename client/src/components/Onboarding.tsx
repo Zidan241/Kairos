@@ -13,22 +13,20 @@ type Step = "welcome" | "activitywatch" | "ready";
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [currentStep, setCurrentStep] = useState<Step>("welcome");
-  const [awStatus, setAwStatus] = useState<{ available: boolean; running: boolean } | null>(null);
+  const [awRunning, setAwRunning] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
 
-  // Check ActivityWatch status
   const checkActivityWatch = async () => {
     setChecking(true);
     try {
       const status = await activityApi.getStatus();
-      setAwStatus(status);
-    } catch (e) {
-      console.error("Failed to check ActivityWatch:", e);
+      setAwRunning(status.running);
+    } catch {
+      setAwRunning(false);
     }
     setChecking(false);
   };
 
-  // Check on mount and when entering the activitywatch step
   useEffect(() => {
     if (currentStep === "activitywatch") {
       checkActivityWatch();
@@ -174,10 +172,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                       <RefreshCw className="h-3 w-3 animate-spin" />
                       Checking...
                     </Badge>
-                  ) : awStatus?.available ? (
+                  ) : awRunning ? (
                     <Badge variant="default" className="gap-2 bg-green-500">
                       <CheckCircle2 className="h-3 w-3" />
-                      ActivityWatch Detected
+                      ActivityWatch Running
                     </Badge>
                   ) : (
                     <Badge variant="secondary" className="gap-2">
@@ -187,8 +185,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   )}
                 </div>
 
-                {/* Show install instructions if not detected */}
-                {!awStatus?.available && (
+                {/* Show install instructions if not running */}
+                {!awRunning && (
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2 justify-center">
                       <Button
@@ -224,12 +222,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 )}
 
                 {/* Success state */}
-                {awStatus?.available && (
+                {awRunning && (
                   <div className="text-center space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      {awStatus.running 
-                        ? "ActivityWatch is running and ready to track your activity."
-                        : "ActivityWatch is installed. Make sure to start it for automatic tracking."}
+                      ActivityWatch is running and ready to track your activity.
                     </p>
                   </div>
                 )}
@@ -245,7 +241,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <Button 
                     className="flex-1"
                     onClick={() => setCurrentStep("ready")}
-                    disabled={!awStatus?.available}
+                    disabled={!awRunning}
                   >
                     Continue
                     <ArrowRight className="ml-2 h-4 w-4" />

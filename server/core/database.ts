@@ -5,9 +5,11 @@ import * as schema from "@shared/schema";
 import path from "path";
 import { getArg } from "../utils/args";
 
+
 export const dbPath = getArg('--db') || path.resolve(import.meta.dirname, "..", "kairo.db");
 
 export const sqlite = new Database(dbPath);
+sqlite.run("PRAGMA foreign_keys = ON");
 
 // Create Drizzle instance
 export const db = drizzle(sqlite, { schema });
@@ -21,6 +23,5 @@ try {
   console.error("❌ Migration failed:", error);
   // Don't crash - the app may still work with an existing schema
 }
-
 // Export for cleanup
 export const closeDatabase = () => sqlite.close();

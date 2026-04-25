@@ -1,18 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { subtasksApi } from "@/lib/api";
-import { NoteListItem } from "@shared/metrics";
+import { notesApi } from "@/lib/api";
+import { NoteListItem } from "@shared/types";
 
 export function useNotesList() {
   return useQuery<NoteListItem[]>({
     queryKey: ['notes-list'],
-    queryFn: subtasksApi.listNotes,
+    queryFn: notesApi.list,
   });
 }
 
 export function useGetNote(subtaskId: number) {
   return useQuery<string | null>({
     queryKey: ['note', subtaskId],
-    queryFn: () => subtasksApi.getNote(subtaskId),
+    queryFn: () => notesApi.get(subtaskId),
     enabled: !!subtaskId,
   });
 }
@@ -25,7 +25,7 @@ export function useSaveNote() {
 
   return useMutation({
     mutationFn: ({ id, content }: { id: number; content: string }) =>
-      subtasksApi.saveNote(id, content),
+      notesApi.save(id, content),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notes-list'] }),
   });
 }

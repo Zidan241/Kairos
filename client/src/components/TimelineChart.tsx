@@ -1,11 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { TimelineSegment } from "@shared/types";
 
-interface ActivitySegment {
-  start: number; // hour (9 = 9AM)
-  end: number;   // hour (10 = 10AM)
-  status: 'focus' | 'prefocus' | 'distracted' | 'idle' | 'untracked';
+interface ActivitySegment extends TimelineSegment {
   task?: string;
 }
 
@@ -50,7 +48,7 @@ export default function TimelineChart({ data }: TimelineChartProps) {
     switch (status) {
       case 'focus': return 'bg-green-500/75';
       case 'prefocus': return 'bg-green-300/60';
-      case 'distracted': return 'bg-red-400/75';
+      case 'distraction': return 'bg-red-400/75';
       case 'idle': return 'bg-slate-400/50';
       case 'untracked': return '';
       default: return 'bg-muted';
@@ -65,7 +63,7 @@ export default function TimelineChart({ data }: TimelineChartProps) {
     switch (status) {
       case 'focus': return 'Focus';
       case 'prefocus': return 'Pre Focus';
-      case 'distracted': return 'Distracted';
+      case 'distraction': return 'Distracted';
       case 'idle': return 'Idle';
       case 'untracked': return 'Untracked';
       default: return 'Unknown';

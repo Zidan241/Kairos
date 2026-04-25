@@ -2,11 +2,17 @@ import { apiRequest } from '@/lib/queryClient';
 import { 
   type Task, type InsertTask, type Subtask, type UpdateSubtask, type InsertSubtask,
   type WorkSessionHistory,
+  type Habit, type InsertHabit, type UpdateHabit,
+  type Goal, type InsertGoal, type UpdateGoal,
   UpdateTask
 } from '@shared/schema';
 import { 
-  type DailyMetrics, type DayReportMetrics, type TaskWithMetrics, type NoteListItem
-} from '@shared/metrics';
+  type DailyMetrics, type DayReportMetrics, type TaskWithMetrics, type NoteListItem,
+  type HabitSummary, type HabitDetails, type HabitDayStatus, type GoalSummary, type GoalDetails
+} from '@shared/types';
+
+// Re-export shared types used by hooks/components
+export type { DailyMetrics, DayReportMetrics, TaskWithMetrics, NoteListItem, HabitSummary, HabitDetails, HabitDayStatus, GoalSummary, GoalDetails };
 
 // -------------------------
 // Tasks API
@@ -54,6 +60,10 @@ export const subtasksApi = {
   delete: async (id: number): Promise<void> => {
     await apiRequest('DELETE', `/api/subtasks/${id}`);
   },
+  skip: async (id: number): Promise<Subtask> => {
+    const res = await apiRequest('PATCH', `/api/subtasks/${id}/skip`);
+    return res.json();
+  },
   getActive: async (): Promise<Subtask | null> => {
     try {
       const res = await apiRequest('GET', '/api/subtasks/active');
@@ -71,41 +81,41 @@ export const subtasksApi = {
     const res = await apiRequest('GET', `/api/subtasks/scheduled/${date}`);
     return res.json();
   },
-  getNote: async (id: number): Promise<string | null> => {
-    const res = await apiRequest('GET', `/api/subtasks/${id}/notes`);
+};
+
+// -------------------------
+// Notes API
+// -------------------------
+export const notesApi = {
+  get: async (id: number): Promise<string | null> => {
+    const res = await apiRequest('GET', `/api/notes/${id}`);
     const data = await res.json();
     return data.notes;
   },
-  saveNote: async (id: number, content: string): Promise<void> => {
-    await apiRequest('PUT', `/api/subtasks/${id}/notes`, { content });
+  save: async (id: number, content: string): Promise<void> => {
+    await apiRequest('PUT', `/api/notes/${id}`, { content });
   },
-  listNotes: async (): Promise<NoteListItem[]> => {
+  list: async (): Promise<NoteListItem[]> => {
     const res = await apiRequest('GET', '/api/notes');
     return res.json();
   },
 };
 
 // -------------------------
-// Work Sessions API
+// Analytics API
 // -------------------------
-export const workSessionsApi = {
-  getByDate: async (date: string): Promise<WorkSessionHistory[]> => {
-    const res = await apiRequest('GET', `/api/work-sessions/${date}`);
+export const analyticsApi = {
+  getWorkSessionsByDate: async (date: string): Promise<WorkSessionHistory[]> => {
+    const res = await apiRequest('GET', `/api/analytics/work-sessions/${date}`);
     return res.json();
   },
-};
-
-// -------------------------
-// Metrics API
-// -------------------------
-export const metricsApi = {
   getDailyMetrics: async (date?: string): Promise<DailyMetrics> => {
     const queryParam = date ? `?date=${date}` : '';
-    const res = await apiRequest('GET', `/api/metrics/daily${queryParam}`);
+    const res = await apiRequest('GET', `/api/analytics/daily-metrics${queryParam}`);
     return res.json();
   },
   getDayReport: async (date: string): Promise<DayReportMetrics> => {
-    const res = await apiRequest('GET', `/api/metrics/day-report?date=${date}`);
+    const res = await apiRequest('GET', `/api/analytics/day-report?date=${date}`);
     return res.json();
   },
 };
@@ -136,6 +146,62 @@ export const databaseApi = {
   },
   backup: async (): Promise<{ path: string }> => {
     const res = await apiRequest('POST', '/api/database/backup');
+    return res.json();
+  },
+};
+
+// -------------------------
+// Goals API
+// -------------------------
+export const goalsApi = {
+  list: async (includeArchived = false): Promise<Goal[]> => {
+    const res = await apiRequest('GET', `/api/goals?archived=${includeArchived}`);
+    return res.json();
+  },
+  getSummary: async (includeArchived = false): Promise<GoalSummary[]> => {
+    const res = await apiRequest('GET', `/api/goals/summary?archived=${includeArchived}`);
+    return res.json();
+  },
+  create: async (goal: InsertGoal): Promise<Goal> => {
+    const res = await apiRequest('POST', '/api/goals', goal);
+    return res.json();
+  },
+  update: async (id: number, updates: Partial<UpdateGoal>): Promise<Goal> => {
+    const res = await apiRequest('PATCH', `/api/goals/${id}`, updates);
+    return res.json();
+  },
+  delete: async (id: number): Promise<void> => {
+    await apiRequest('DELETE', `/api/goals/${id}`);
+  },
+  getDetails: async (id: number, days: number = 30): Promise<GoalDetails> => {
+    const res = await apiRequest('GET', `/api/goals/${id}/details?days=${days}`);
+    return res.json();
+  },
+};
+
+// -------------------------
+// Habits API
+// -------------------------
+
+export const habitsApi = {
+  create: async (habit: InsertHabit): Promise<Habit> => {
+    const res = await apiRequest('POST', '/api/habits', habit);
+    return res.json();
+  },
+  update: async (id: number, updates: Partial<UpdateHabit>): Promise<Habit> => {
+    const res = await apiRequest('PUT', `/api/habits/${id}`, updates);
+    return res.json();
+  },
+  delete: async (id: number): Promise<void> => {
+    await apiRequest('DELETE', `/api/habits/${id}`);
+  },
+  getSummary: async (includeArchived = false): Promise<HabitSummary[]> => {
+    const param = includeArchived ? '?includeArchived=true' : '';
+    const res = await apiRequest('GET', `/api/habits/summary${param}`);
+    return res.json();
+  },
+  getDetails: async (id: number, days: number = 30): Promise<HabitDetails> => {
+    const res = await apiRequest('GET', `/api/habits/${id}/details?days=${days}`);
     return res.json();
   },
 };

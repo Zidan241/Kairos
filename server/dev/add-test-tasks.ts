@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import { db } from "../core/database";
-import { tasks, subtasks, activityBuckets } from "../../shared/schema";
+import { goals, tasks, subtasks, activityBuckets, workSessionsHistory, taskScheduleHistory } from "../../shared/schema";
 import { dateUtils } from "../../shared/utils";
 
-// use bun run server/add-test-tasks.ts to run
+// use bun run server/dev/add-test-tasks.ts to run
 
 async function clearTables() {
   console.log('🗑️  Clearing existing data...');
@@ -12,12 +12,21 @@ async function clearTables() {
     // Delete in proper order to respect foreign key constraints
     await db.delete(activityBuckets);
     console.log('  ✓ Cleared activity buckets');
-    
+
+    await db.delete(workSessionsHistory);
+    console.log('  ✓ Cleared work sessions history');
+
+    await db.delete(taskScheduleHistory);
+    console.log('  ✓ Cleared task schedule history');
+
     await db.delete(subtasks);
     console.log('  ✓ Cleared subtasks');
     
     await db.delete(tasks);
     console.log('  ✓ Cleared tasks');
+
+    await db.delete(goals);
+    console.log('  ✓ Cleared goals');
     
     console.log('🎯 All tables cleared successfully!\n');
   } catch (error) {
@@ -28,580 +37,572 @@ async function clearTables() {
 
 async function addTestData() {
   const today = dateUtils.getTodayDate();
-  const yesterday = dateUtils.formatDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
-  const twoDaysAgo = dateUtils.formatDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000));
-  const threeDaysAgo = dateUtils.formatDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000));
-  const tomorrow = dateUtils.formatDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
-  const dayAfterTomorrow = dateUtils.formatDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
-  const fourDaysFromNow = dateUtils.formatDate(new Date(Date.now() + 4 * 24 * 60 * 60 * 1000));
-  const fiveDaysFromNow = dateUtils.formatDate(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000));
-  
-  console.log(`Adding hackathon project test data across multiple days:`);
-  console.log(`  Three days ago: ${threeDaysAgo} (spec written)`);
-  console.log(`  Two days ago: ${twoDaysAgo} (project skeleton)`);
-  console.log(`  Yesterday: ${yesterday} (focus page backend)`);
-  console.log(`  Today: ${today} (continuing focus page)`);
-  console.log(`  Tomorrow: ${tomorrow} (plan page backend)`);
-  console.log(`  Day after tomorrow: ${dayAfterTomorrow} (reflect page backend)`);
-  console.log(`  Weekend: ${fourDaysFromNow} - ${fiveDaysFromNow} (presentation)`);
-  
+  const daysAgo = (n: number) => dateUtils.formatDate(new Date(Date.now() - n * 24 * 60 * 60 * 1000));
+  const daysFromNow = (n: number) => dateUtils.formatDate(new Date(Date.now() + n * 24 * 60 * 60 * 1000));
+  const isoAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  const isoFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString();
+
   try {
-    // Create hackathon project tasks
-    console.log('Creating hackathon project tasks...');
-    const hackathonSpec = await db.insert(tasks).values({
-      title: "Write hackathon project spec",
-      description: "Write a comprehensive spec for the hackathon project including objectives, features, and UI pages",
-      priority: "urgent",
-      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // Due Sunday (2 days)
+    // ── Goals ──────────────────────────────────────────────
+    console.log('Creating goals...');
+    const [learningGoal] = await db.insert(goals).values({ title: "Learning", description: "Courses, tutorials, and skill development" }).returning();
+    const [fitnessGoal] = await db.insert(goals).values({ title: "Fitness", description: "Exercise and physical health" }).returning();
+    const [projectGoal] = await db.insert(goals).values({ title: "Side Project", description: "Building the weekend side project" }).returning();
+    console.log(`  Created goals: Learning(${learningGoal.id}), Fitness(${fitnessGoal.id}), Side Project(${projectGoal.id})`);
+
+    // ── Tasks (with goal links) ───────────────────────────
+    console.log('Creating tasks...');
+
+    // Task 1: linked to Learning goal, completed
+    const [courseTask] = await db.insert(tasks).values({
+      title: "Complete React Advanced Patterns course",
+      description: "Finish the remaining modules on compound components and render props",
+      priority: "high",
+      dueDate: isoAgo(1),
       isCompleted: true,
-      completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Completed yesterday
+      completedAt: isoAgo(1),
+      goalId: learningGoal.id,
     }).returning();
 
-    const projectSkeleton = await db.insert(tasks).values({
-      title: "Build project skeleton with Replit",
-      description: "Set up the initial project structure and development environment",
-      priority: "high",
-      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // Due Monday (3 days)
-      isCompleted: false,
-    }).returning();
-
-    const focusPageBackend = await db.insert(tasks).values({
-      title: "Implement backend for Focus page",
-      description: "Build the backend functionality for the Focus page with nested lists and metrics",
-      priority: "high",
-      dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(), // Due Tuesday (4 days)
-      isCompleted: false,
-    }).returning();
-
-    const planPageBackend = await db.insert(tasks).values({
-      title: "Implement backend for Plan page",
-      description: "Build the backend functionality for the Plan page with nested lists and modals",
-      priority: "high",
-      dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), // Due Wednesday (5 days)
-      isCompleted: false,
-    }).returning();
-
-    const reflectPageBackend = await db.insert(tasks).values({
-      title: "Implement backend for Reflect page",
-      description: "Build metrics calculation and reporting functionality",
-      priority: "high",
-      dueDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(), // Due Thursday (6 days)
-      isCompleted: false,
-    }).returning();
-
-    const presentationDemo = await db.insert(tasks).values({
-      title: "Create presentation and demo",
-      description: "Prepare final presentation and demonstration for hackathon submission",
+    // Task 2: linked to Side Project goal, in progress
+    const [apiTask] = await db.insert(tasks).values({
+      title: "Build REST API for side project",
+      description: "Implement all CRUD endpoints and authentication",
       priority: "urgent",
-      dueDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(), // Due Saturday (8 days)
-      isCompleted: false,
+      dueDate: isoFromNow(3),
+      goalId: projectGoal.id,
     }).returning();
 
-    console.log(`Created hackathon project tasks:`, {
-      hackathonSpec: hackathonSpec[0].id,
-      projectSkeleton: projectSkeleton[0].id,
-      focusPageBackend: focusPageBackend[0].id,
-      planPageBackend: planPageBackend[0].id,
-      reflectPageBackend: reflectPageBackend[0].id,
-      presentationDemo: presentationDemo[0].id
+    // Task 3: no goal, in progress
+    const [groceryTask] = await db.insert(tasks).values({
+      title: "Reorganize kitchen pantry",
+      description: "Sort through everything and organize by category",
+      priority: "low",
+      dueDate: isoFromNow(5),
+    }).returning();
+
+    // Task 4: linked to Learning goal, not started
+    const [bookTask] = await db.insert(tasks).values({
+      title: "Read Designing Data-Intensive Applications ch. 5-8",
+      description: "Chapters on replication, partitioning, transactions, and distributed systems",
+      priority: "medium",
+      dueDate: isoFromNow(7),
+      goalId: learningGoal.id,
+    }).returning();
+
+    console.log(`  Created 4 tasks`);
+
+    // ── Subtasks (with overrideGoal variations) ───────────
+    console.log('Creating subtasks...');
+
+    // -- courseTask subtasks (all completed, inherit Learning goal)
+    const [courseS1] = await db.insert(subtasks).values({
+      parentTaskId: courseTask.id,
+      title: "Module 5: Compound Components",
+      estimatedMinutes: 60,
+      status: "completed",
+      scheduledDate: daysAgo(3),
+      scheduledStartTime: 9 * 60,
+      completedAt: isoAgo(3),
+    }).returning();
+
+    const [courseS2] = await db.insert(subtasks).values({
+      parentTaskId: courseTask.id,
+      title: "Module 6: Render Props",
+      estimatedMinutes: 45,
+      status: "completed",
+      scheduledDate: daysAgo(2),
+      scheduledStartTime: 10 * 60,
+      completedAt: isoAgo(2),
+    }).returning();
+
+    const [courseS3] = await db.insert(subtasks).values({
+      parentTaskId: courseTask.id,
+      title: "Module 7: State Reducers",
+      estimatedMinutes: 50,
+      status: "completed",
+      scheduledDate: daysAgo(1),
+      scheduledStartTime: 9 * 60,
+      completedAt: isoAgo(1),
+    }).returning();
+
+    // -- apiTask subtasks (Side Project goal, with override variations)
+    const [apiS1] = await db.insert(subtasks).values({
+      parentTaskId: apiTask.id,
+      title: "Set up Express server + middleware",
+      estimatedMinutes: 90,
+      status: "completed",
+      scheduledDate: daysAgo(1),
+      scheduledStartTime: 14 * 60,
+      completedAt: isoAgo(1),
+      // inherits Side Project goal (default)
+    }).returning();
+
+    const [apiS2] = await db.insert(subtasks).values({
+      parentTaskId: apiTask.id,
+      title: "Implement user auth endpoints",
+      estimatedMinutes: 120,
+      status: "active",
+      activatedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      scheduledDate: today,
+      scheduledStartTime: 10 * 60,
+      // inherits Side Project goal (default)
+    }).returning();
+
+    const [apiS3] = await db.insert(subtasks).values({
+      parentTaskId: apiTask.id,
+      title: "Research OAuth2 libraries",
+      description: "This is a learning task, not project work",
+      estimatedMinutes: 60,
+      status: "pending",
+      scheduledDate: today,
+      scheduledStartTime: 14 * 60,
+      // overrideGoal → Learning (different from parent's Side Project)
+      overrideGoal: true,
+      goalId: learningGoal.id,
+    }).returning();
+
+    const [apiS4] = await db.insert(subtasks).values({
+      parentTaskId: apiTask.id,
+      title: "Write integration tests",
+      estimatedMinutes: 90,
+      status: "pending",
+      scheduledDate: daysFromNow(1),
+      scheduledStartTime: 9 * 60,
+      // overrideGoal → no goal
+      overrideGoal: true,
+      goalId: null,
+    }).returning();
+
+    const [apiS5] = await db.insert(subtasks).values({
+      parentTaskId: apiTask.id,
+      title: "Deploy to staging",
+      estimatedMinutes: 45,
+      status: "pending",
+      scheduledDate: daysFromNow(2),
+      scheduledStartTime: 11 * 60,
+      // inherits Side Project goal (default)
+    }).returning();
+
+    // -- groceryTask subtasks (no goal on parent)
+    const [groceryS1] = await db.insert(subtasks).values({
+      parentTaskId: groceryTask.id,
+      title: "Clear out expired items",
+      estimatedMinutes: 30,
+      status: "pending",
+      scheduledDate: daysFromNow(3),
+      scheduledStartTime: 10 * 60,
+    }).returning();
+
+    // -- bookTask subtasks (Learning goal on parent)
+    const [bookS1] = await db.insert(subtasks).values({
+      parentTaskId: bookTask.id,
+      title: "Chapter 5: Replication",
+      estimatedMinutes: 90,
+      status: "pending",
+      scheduledDate: daysFromNow(1),
+      scheduledStartTime: 15 * 60,
+    }).returning();
+
+    const [bookS2] = await db.insert(subtasks).values({
+      parentTaskId: bookTask.id,
+      title: "Chapter 6: Partitioning",
+      estimatedMinutes: 90,
+      status: "pending",
+      scheduledDate: daysFromNow(3),
+      scheduledStartTime: 15 * 60,
+    }).returning();
+
+    // Task 5: linked to Learning goal, many subtasks to trigger "View all"
+    const [deepDiveTask] = await db.insert(tasks).values({
+      title: "Deep dive into TypeScript patterns",
+      description: "Comprehensive study of advanced TypeScript features",
+      priority: "medium",
+      dueDate: isoFromNow(14),
+      goalId: learningGoal.id,
+    }).returning();
+
+    const deepDiveSubtasks = [
+      "Mapped types & template literals",
+      "Conditional types & infer",
+      "Discriminated unions",
+      "Branded types",
+      "Variance & covariance",
+      "Module augmentation",
+      "Decorator patterns",
+      "Type-level programming exercises",
+    ];
+    for (const title of deepDiveSubtasks) {
+      await db.insert(subtasks).values({
+        parentTaskId: deepDiveTask.id,
+        title,
+        estimatedMinutes: 45,
+        status: "pending",
+        scheduledDate: daysFromNow(Math.floor(Math.random() * 14) + 1),
+        scheduledStartTime: 16 * 60,
+      });
+    }
+
+    console.log(`  Created 11 subtasks + 8 deep-dive subtasks`);
+
+    // ── Habits ────────────────────────────────────────────
+    console.log('Creating habits...');
+
+    // Habits need scheduleHistory + past createdAt so the summary service
+    // recognises historical subtasks as valid (isHabitDueOnDate checks scheduleHistory.from)
+    const habitCreatedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const habitScheduleFrom = daysAgo(30);
+
+    // Habit 1: daily, linked to Fitness
+    const [morningRun] = await db.insert(tasks).values({
+      title: "Morning run",
+      isHabit: true,
+      frequency: "daily",
+      estimateMinutes: 30,
+      goalId: fitnessGoal.id,
+      createdAt: habitCreatedAt,
+      scheduleHistory: [{ from: habitScheduleFrom, frequency: "daily", customDays: null }],
+    }).returning();
+
+    // Habit 2: daily, linked to Learning
+    const [dailyReading] = await db.insert(tasks).values({
+      title: "Read for 30 minutes",
+      isHabit: true,
+      frequency: "daily",
+      estimateMinutes: 30,
+      goalId: learningGoal.id,
+      createdAt: habitCreatedAt,
+      scheduleHistory: [{ from: habitScheduleFrom, frequency: "daily", customDays: null }],
+    }).returning();
+
+    // Habit 3: weekly (Mon/Wed/Fri), linked to Fitness
+    const [strengthTraining] = await db.insert(tasks).values({
+      title: "Strength training",
+      isHabit: true,
+      frequency: "custom",
+      customDays: [1, 3, 5], // Mon, Wed, Fri
+      estimateMinutes: 45,
+      goalId: fitnessGoal.id,
+      createdAt: habitCreatedAt,
+      scheduleHistory: [{ from: habitScheduleFrom, frequency: "custom", customDays: [1, 3, 5] }],
+    }).returning();
+
+    // Habit 4: daily, no goal
+    const [journaling] = await db.insert(tasks).values({
+      title: "Evening journaling",
+      isHabit: true,
+      frequency: "daily",
+      estimateMinutes: 15,
+      createdAt: habitCreatedAt,
+      scheduleHistory: [{ from: habitScheduleFrom, frequency: "daily", customDays: null }],
+    }).returning();
+
+    // Extra Fitness habits (so Fitness goal triggers "View all")
+    const extraFitnessHabits = [
+      { title: "Stretching routine", estimateMinutes: 15, frequency: "daily" as const, customDays: null },
+      { title: "Evening walk", estimateMinutes: 20, frequency: "daily" as const, customDays: null },
+      { title: "Yoga session", estimateMinutes: 30, frequency: "custom" as const, customDays: [2, 4, 6] },
+      { title: "Core workout", estimateMinutes: 20, frequency: "custom" as const, customDays: [1, 3, 5] },
+      { title: "Hydration tracking", estimateMinutes: 5, frequency: "daily" as const, customDays: null },
+    ];
+    for (const h of extraFitnessHabits) {
+      await db.insert(tasks).values({
+        title: h.title,
+        isHabit: true,
+        frequency: h.frequency,
+        customDays: h.customDays,
+        estimateMinutes: h.estimateMinutes,
+        goalId: fitnessGoal.id,
+        createdAt: habitCreatedAt,
+        scheduleHistory: [{ from: habitScheduleFrom, frequency: h.frequency, customDays: h.customDays }],
+      });
+    }
+
+    console.log(`  Created 4 habits + 5 extra fitness habits`);
+
+    // Track bucket count across all sections
+    let bucketCount = 0;
+
+    // ── Habit subtasks (completions over last 30 days) ────
+    console.log('Creating habit completion history (30 days)...');
+
+    for (let d = 29; d >= 0; d--) {
+      const date = daysAgo(d);
+      const dayOfWeek = new Date(Date.now() - d * 24 * 60 * 60 * 1000).getDay();
+
+      // Morning run: ~70% completion (skip some days semi-randomly)
+      const runSkipped = d % 5 === 0 || d % 7 === 3; // skip every 5th day and some others
+      const [runSub] = await db.insert(subtasks).values({
+        parentTaskId: morningRun.id,
+        title: "Morning run",
+        estimatedMinutes: 30,
+        status: runSkipped ? "skipped" : "completed",
+        scheduledDate: date,
+        scheduledStartTime: 7 * 60,
+        ...(!runSkipped ? { completedAt: isoAgo(d) } : {}),
+      }).returning();
+
+      if (!runSkipped) {
+        const runStart = new Date(Date.now() - d * 24 * 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
+        await db.insert(workSessionsHistory).values({
+          subtaskId: runSub.id,
+          startedAt: runStart.toISOString(),
+          endedAt: new Date(runStart.getTime() + 30 * 60 * 1000).toISOString(),
+          durationMinutes: 30,
+          date,
+        });
+        for (let b = 0; b < 6; b++) {
+          const bStart = new Date(runStart.getTime() + b * 5 * 60 * 1000);
+          await db.insert(activityBuckets).values({
+            subtaskId: runSub.id,
+            date,
+            startTime: bStart.toISOString(),
+            endTime: new Date(bStart.getTime() + 5 * 60 * 1000).toISOString(),
+            category: b < 4 ? "focus" : b === 4 ? "prefocus" : "distraction",
+            dominantApp: b < 5 ? "Strava" : "Instagram",
+            apps: JSON.stringify(b < 5 ? { "Strava": 240, "Music": 60 } : { "Instagram": 200, "Strava": 100 }),
+            workSessionApp: "Strava",
+          });
+          bucketCount++;
+        }
+      }
+
+      // Daily reading: ~90% completion (perfect recent streak, missed a few early days)
+      const readSkipped = d > 20 && d % 8 === 0;
+      const [readSub] = await db.insert(subtasks).values({
+        parentTaskId: dailyReading.id,
+        title: "Read for 30 minutes",
+        estimatedMinutes: 30,
+        status: readSkipped ? "skipped" : "completed",
+        scheduledDate: date,
+        scheduledStartTime: 21 * 60,
+        ...(!readSkipped ? { completedAt: isoAgo(d) } : {}),
+      }).returning();
+
+      if (!readSkipped) {
+        const readStart = new Date(Date.now() - d * 24 * 60 * 60 * 1000 + 21 * 60 * 60 * 1000);
+        await db.insert(workSessionsHistory).values({
+          subtaskId: readSub.id,
+          startedAt: readStart.toISOString(),
+          endedAt: new Date(readStart.getTime() + 30 * 60 * 1000).toISOString(),
+          durationMinutes: 30,
+          date,
+        });
+        for (let b = 0; b < 6; b++) {
+          const bStart = new Date(readStart.getTime() + b * 5 * 60 * 1000);
+          await db.insert(activityBuckets).values({
+            subtaskId: readSub.id,
+            date,
+            startTime: bStart.toISOString(),
+            endTime: new Date(bStart.getTime() + 5 * 60 * 1000).toISOString(),
+            category: b < 5 ? "focus" : "idle",
+            dominantApp: b < 5 ? "Kindle" : "System Idle",
+            apps: JSON.stringify(b < 5 ? { "Kindle": 280, "Notes": 20 } : { "System Idle": 300 }),
+            workSessionApp: "Kindle",
+          });
+          bucketCount++;
+        }
+      }
+
+      // Strength training: only on Mon/Wed/Fri, completed all scheduled
+      if ([1, 3, 5].includes(dayOfWeek)) {
+        const [strengthSub] = await db.insert(subtasks).values({
+          parentTaskId: strengthTraining.id,
+          title: "Strength training",
+          estimatedMinutes: 45,
+          status: "completed",
+          scheduledDate: date,
+          scheduledStartTime: 17 * 60,
+          completedAt: isoAgo(d),
+        }).returning();
+
+        const strengthStart = new Date(Date.now() - d * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000);
+        await db.insert(workSessionsHistory).values({
+          subtaskId: strengthSub.id,
+          startedAt: strengthStart.toISOString(),
+          endedAt: new Date(strengthStart.getTime() + 45 * 60 * 1000).toISOString(),
+          durationMinutes: 45,
+          date,
+        });
+        for (let b = 0; b < 9; b++) {
+          const bStart = new Date(strengthStart.getTime() + b * 5 * 60 * 1000);
+          await db.insert(activityBuckets).values({
+            subtaskId: strengthSub.id,
+            date,
+            startTime: bStart.toISOString(),
+            endTime: new Date(bStart.getTime() + 5 * 60 * 1000).toISOString(),
+            category: b < 6 ? "focus" : b < 8 ? "prefocus" : "distraction",
+            dominantApp: b < 8 ? "Strong" : "YouTube",
+            apps: JSON.stringify(b < 8 ? { "Strong": 200, "Music": 100 } : { "YouTube": 220, "Strong": 80 }),
+            workSessionApp: "Strong",
+          });
+          bucketCount++;
+        }
+      }
+
+      // Journaling: ~50% completion (sporadic, worse than other habits)
+      const journalCompleted = d % 2 === 0 || d % 3 === 0;
+      if (journalCompleted) {
+        const [journalSub] = await db.insert(subtasks).values({
+          parentTaskId: journaling.id,
+          title: "Evening journaling",
+          estimatedMinutes: 15,
+          status: "completed",
+          scheduledDate: date,
+          scheduledStartTime: 22 * 60,
+          completedAt: isoAgo(d),
+        }).returning();
+
+        const journalStart = new Date(Date.now() - d * 24 * 60 * 60 * 1000 + 22 * 60 * 60 * 1000);
+        await db.insert(workSessionsHistory).values({
+          subtaskId: journalSub.id,
+          startedAt: journalStart.toISOString(),
+          endedAt: new Date(journalStart.getTime() + 15 * 60 * 1000).toISOString(),
+          durationMinutes: 15,
+          date,
+        });
+        for (let b = 0; b < 3; b++) {
+          const bStart = new Date(journalStart.getTime() + b * 5 * 60 * 1000);
+          await db.insert(activityBuckets).values({
+            subtaskId: journalSub.id,
+            date,
+            startTime: bStart.toISOString(),
+            endTime: new Date(bStart.getTime() + 5 * 60 * 1000).toISOString(),
+            category: "focus",
+            dominantApp: "Day One",
+            apps: JSON.stringify({ "Day One": 260, "Notes": 40 }),
+            workSessionApp: "Day One",
+          });
+          bucketCount++;
+        }
+      }
+    }
+
+    console.log(`  Created 30 days of habit completions`);
+
+    // ── Work sessions for task subtasks ───────────────────
+    console.log('Creating work sessions for task subtasks...');
+
+    // courseS1: 55 min session
+    await db.insert(workSessionsHistory).values({
+      subtaskId: courseS1.id,
+      startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 9.92 * 60 * 60 * 1000).toISOString(),
+      durationMinutes: 55,
+      date: daysAgo(3),
     });
 
-    // Create subtasks for hackathon project
-    console.log('Creating hackathon subtasks...');
-    
-    // Spec writing subtasks (completed)
-    const subtask1 = await db.insert(subtasks).values({
-      parentTaskId: hackathonSpec[0].id,
-      title: "Outline high-level objectives",
-      description: "Define the main goals and objectives for the hackathon project",
-      estimatedMinutes: 60,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: threeDaysAgo,
-      completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
+    // courseS2: 40 min session
+    await db.insert(workSessionsHistory).values({
+      subtaskId: courseS2.id,
+      startedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 10.67 * 60 * 60 * 1000).toISOString(),
+      durationMinutes: 40,
+      date: daysAgo(2),
+    });
 
-    const subtask2 = await db.insert(subtasks).values({
-      parentTaskId: hackathonSpec[0].id,
-      title: "Draft technical implementation plan",
-      description: "Document the technical approach and architecture decisions",
-      estimatedMinutes: 90,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 11 * 60, // 11:00 AM
-      scheduledDate: threeDaysAgo,
-      completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
+    // courseS3: 50 min session
+    await db.insert(workSessionsHistory).values({
+      subtaskId: courseS3.id,
+      startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 9.83 * 60 * 60 * 1000).toISOString(),
+      durationMinutes: 50,
+      date: daysAgo(1),
+    });
 
-    // Project skeleton subtasks (completed)
-    const subtask3 = await db.insert(subtasks).values({
-      parentTaskId: projectSkeleton[0].id,
-      title: "Initialize Vite + React + TypeScript project",
-      description: "Set up the basic project structure with modern tooling",
-      estimatedMinutes: 45,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: twoDaysAgo,
-      completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
+    // apiS1: 80 min session
+    await db.insert(workSessionsHistory).values({
+      subtaskId: apiS1.id,
+      startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 15.33 * 60 * 60 * 1000).toISOString(),
+      durationMinutes: 80,
+      date: daysAgo(1),
+    });
 
-    const subtask4 = await db.insert(subtasks).values({
-      parentTaskId: projectSkeleton[0].id,
-      title: "Set up Drizzle ORM with SQLite",
-      description: "Configure database schema and connection",
-      estimatedMinutes: 90,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 10 * 60, // 10:00 AM
-      scheduledDate: twoDaysAgo,
-      completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
+    // apiS2: active session (started 45 min ago, no endedAt)
+    await db.insert(workSessionsHistory).values({
+      subtaskId: apiS2.id,
+      startedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      endedAt: null,
+      durationMinutes: null,
+      date: today,
+    });
 
-    const subtask5 = await db.insert(subtasks).values({
-      parentTaskId: projectSkeleton[0].id,
-      title: "Basic routing and layout components",
-      description: "Create main layout and navigation structure",
-      estimatedMinutes: 120,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 12 * 60, // 12:00 PM
-      scheduledDate: twoDaysAgo,
-      completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
+    console.log(`  Created 5 work sessions for tasks`);
 
-    // Focus page backend subtasks (in progress)
-    const subtask6 = await db.insert(subtasks).values({
-      parentTaskId: focusPageBackend[0].id,
-      title: "Design task and subtask database schema",
-      description: "Create tables for tasks, subtasks, and scheduling",
-      estimatedMinutes: 60,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: yesterday,
-      completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
-
-    const subtask7 = await db.insert(subtasks).values({
-      parentTaskId: focusPageBackend[0].id,
-      title: "Implement CRUD operations for tasks",
-      description: "Create, read, update, delete operations for task management",
-      estimatedMinutes: 150,
-      isCompleted: true,
-      isActive: false,
-      scheduledStartTime: 10 * 60, // 10:00 AM
-      scheduledDate: yesterday,
-      completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    }).returning();
-
-    const subtask8 = await db.insert(subtasks).values({
-      parentTaskId: focusPageBackend[0].id,
-      title: "Build timer and time tracking API",
-      description: "API endpoints for starting, stopping, and tracking work sessions",
-      estimatedMinutes: 180,
-      isCompleted: false,
-      isActive: true,
-      scheduledStartTime: 14 * 60, // 2:00 PM
-      scheduledDate: today,
-    }).returning();
-
-    // Plan page backend subtasks (scheduled)
-    const subtask9 = await db.insert(subtasks).values({
-      parentTaskId: planPageBackend[0].id,
-      title: "Design calendar and scheduling data model",
-      description: "Schema for calendar events and task scheduling",
-      estimatedMinutes: 90,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: tomorrow,
-    }).returning();
-
-    const subtask10 = await db.insert(subtasks).values({
-      parentTaskId: planPageBackend[0].id,
-      title: "Calendar integration API endpoints",
-      description: "CRUD operations for calendar events and scheduling",
-      estimatedMinutes: 180,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 11 * 60, // 11:00 AM
-      scheduledDate: tomorrow,
-    }).returning();
-
-    const subtask11 = await db.insert(subtasks).values({
-      parentTaskId: planPageBackend[0].id,
-      title: "Time blocking and conflict detection",
-      description: "Logic to prevent overlapping schedules and suggest optimal times",
-      estimatedMinutes: 240,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 14 * 60, // 2:00 PM
-      scheduledDate: tomorrow,
-    }).returning();
-
-    // Reflect page backend subtasks (scheduled)
-    const subtask12 = await db.insert(subtasks).values({
-      parentTaskId: reflectPageBackend[0].id,
-      title: "Design metrics and analytics schema",
-      description: "Database design for productivity metrics and insights",
-      estimatedMinutes: 120,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: dayAfterTomorrow,
-    }).returning();
-
-    const subtask13 = await db.insert(subtasks).values({
-      parentTaskId: reflectPageBackend[0].id,
-      title: "Implement productivity analytics algorithms",
-      description: "Calculate time tracking, focus patterns, and productivity scores",
-      estimatedMinutes: 180,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 11 * 60, // 11:00 AM
-      scheduledDate: dayAfterTomorrow,
-    }).returning();
-
-    // Presentation subtasks (scheduled for weekend)
-    const subtask14 = await db.insert(subtasks).values({
-      parentTaskId: presentationDemo[0].id,
-      title: "Create demo script and flow",
-      description: "Plan the demo presentation and key features to showcase",
-      estimatedMinutes: 90,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 10 * 60, // 10:00 AM
-      scheduledDate: fourDaysFromNow, // Friday
-    }).returning();
-
-    const subtask15 = await db.insert(subtasks).values({
-      parentTaskId: presentationDemo[0].id,
-      title: "Record demo video",
-      description: "Record a polished demo showcasing all three pages",
-      estimatedMinutes: 120,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 14 * 60, // 2:00 PM
-      scheduledDate: fourDaysFromNow, // Friday
-    }).returning();
-
-    const subtask16 = await db.insert(subtasks).values({
-      parentTaskId: presentationDemo[0].id,
-      title: "Prepare presentation slides",
-      description: "Create slides covering architecture, features, and future roadmap",
-      estimatedMinutes: 150,
-      isCompleted: false,
-      isActive: false,
-      scheduledStartTime: 9 * 60, // 9:00 AM
-      scheduledDate: fiveDaysFromNow, // Saturday
-    }).returning();
-
-    console.log(`Created ${16} hackathon subtasks`);
-
-    // Create activity buckets (simulate work activity)
+    // ── Activity buckets (for focus/distraction metrics) ──
     console.log('Creating activity buckets...');
-    const now = new Date();
 
-    // Create activity for completed hackathon subtasks
-    // Subtask 1 - Outline objectives (completed 3 days ago)
-    const specOutlineStart = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000); // 9 AM three days ago
-    for (let i = 0; i < 12; i++) { // 1 hour of spec writing
-      const bucketStart = new Date(specOutlineStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask1[0].id,
-        date: threeDaysAgo,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 10 ? "focus" as const : "prefocus" as const,
-        dominantApp: "Notion",
-        apps: JSON.stringify({
-          "Notion": 260,
-          "Chrome": 30,
-          "Slack": 10
-        }),
-        workSessionApp: "Notion",
-      });
-    }
+    // Helper to create a batch of 5-min buckets
+    async function createBuckets(
+      subtaskId: number,
+      date: string,
+      startHour: number,
+      count: number,
+      pattern: Array<{ category: "focus" | "prefocus" | "distraction" | "idle"; app: string }>
+    ) {
+      const dayOffset = (new Date(date + "T00:00:00").getTime() - new Date(today + "T00:00:00").getTime()) / (24 * 60 * 60 * 1000);
+      const baseTime = new Date(Date.now() + dayOffset * 24 * 60 * 60 * 1000);
+      baseTime.setHours(startHour, 0, 0, 0);
 
-    // Subtask 2 - Technical implementation plan (completed 3 days ago)
-    const techPlanStart = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 11 * 60 * 60 * 1000); // 11 AM three days ago
-    for (let i = 0; i < 18; i++) { // 1.5 hours of technical planning
-      const bucketStart = new Date(techPlanStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask2[0].id,
-        date: threeDaysAgo,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 12 ? "focus" as const : i < 15 ? "prefocus" as const : "distraction" as const,
-        dominantApp: i < 15 ? "Notion" : "Slack",
-        apps: JSON.stringify({
-          "Notion": i < 15 ? 220 : 80,
-          "Figma": i < 15 ? 60 : 20,
-          "Chrome": i < 15 ? 20 : 100,
-          "Slack": i < 15 ? 0 : 100
-        }),
-        workSessionApp: "Notion",
-      });
-    }
-
-    // Subtask 3 - Initialize Vite project (completed 2 days ago)
-    const viteSetupStart = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000); // 9 AM two days ago
-    for (let i = 0; i < 9; i++) { // 45 minutes of project setup
-      const bucketStart = new Date(viteSetupStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask3[0].id,
-        date: twoDaysAgo,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 6 ? "focus" as const : i < 8 ? "prefocus" as const : "distraction" as const,
-        dominantApp: i < 8 ? "Terminal" : "Chrome",
-        apps: JSON.stringify({
-          "Terminal": i < 8 ? 240 : 60,
-          "Visual Studio Code": i < 8 ? 40 : 20,
-          "Chrome": i < 8 ? 20 : 220
-        }),
-        workSessionApp: "Terminal",
-      });
-    }
-
-    // Subtask 4 - Drizzle ORM setup (spans 2 days - started 2 days ago, continued yesterday)
-    // Day 1: Initial setup (2 days ago)
-    const drizzleSetupDay1Start = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000); // 10 AM two days ago
-    for (let i = 0; i < 12; i++) { // 1 hour on day 1
-      const bucketStart = new Date(drizzleSetupDay1Start.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask4[0].id,
-        date: twoDaysAgo,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 8 ? "focus" as const : i < 10 ? "prefocus" as const : "distraction" as const,
-        dominantApp: i < 10 ? "Visual Studio Code" : "Slack",
-        apps: JSON.stringify({
-          "Visual Studio Code": i < 10 ? 200 : 80,
-          "Terminal": i < 10 ? 80 : 20,
-          "Chrome": i < 10 ? 20 : 60,
-          "Slack": i < 10 ? 0 : 140
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
-    
-    // Day 2: Completion (yesterday)
-    const drizzleSetupDay2Start = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000); // 8 AM yesterday
-    for (let i = 0; i < 6; i++) { // 30 minutes on day 2 to finish
-      const bucketStart = new Date(drizzleSetupDay2Start.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask4[0].id,
-        date: yesterday,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 5 ? "focus" as const : "idle" as const,
-        dominantApp: i < 5 ? "Visual Studio Code" : "System Idle",
-        apps: JSON.stringify({
-          "Visual Studio Code": i < 5 ? 220 : 0,
-          "Terminal": i < 5 ? 60 : 0,
-          "Chrome": i < 5 ? 20 : 0,
-          "System Idle": i < 5 ? 0 : 300
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
-
-    // Current active subtask (subtask 8 - Timer API, in progress today - more realistic pattern)
-    const timerApiStart = new Date(now.getTime() - 2 * 60 * 60 * 1000); // Started 2 hours ago
-    for (let i = 0; i < 20; i++) { // 1 hour 40 minutes of current activity
-      const bucketStart = new Date(timerApiStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      // More realistic pattern: some focus, some distractions, some idle time
-      let category: "focus" | "prefocus" | "distraction" | "idle";
-      let dominantApp: string;
-      let apps: any;
-      
-      if (i < 8) { // First 40 minutes: good focus
-        category = i % 3 === 0 ? "prefocus" as const : "focus" as const;
-        dominantApp = "Visual Studio Code";
-        apps = {
-          "Visual Studio Code": 240,
-          "Terminal": 40,
-          "Chrome": 20
-        };
-      } else if (i < 12) { // 20 minutes: distraction break
-        category = "distraction" as const;
-        dominantApp = "Slack";
-        apps = {
-          "Slack": 180,
-          "Chrome": 80,
-          "Visual Studio Code": 40
-        };
-      } else if (i < 16) { // 20 minutes: back to focus
-        category = i % 2 === 0 ? "focus" as const : "prefocus" as const;
-        dominantApp = "Visual Studio Code";
-        apps = {
-          "Visual Studio Code": 200,
-          "Terminal": 80,
-          "Chrome": 20
-        };
-      } else { // Last 20 minutes: losing focus, some idle
-        category = i < 18 ? "distraction" as const : "idle" as const;
-        dominantApp = i < 18 ? "Chrome" : "System Idle";
-        apps = i < 18 ? {
-          "Chrome": 160,
-          "Slack": 100,
-          "Visual Studio Code": 40
-        } : {
-          "System Idle": 300
-        };
+      for (let i = 0; i < count; i++) {
+        const p = pattern[i % pattern.length];
+        const start = new Date(baseTime.getTime() + i * 5 * 60 * 1000);
+        const end = new Date(start.getTime() + 5 * 60 * 1000);
+        await db.insert(activityBuckets).values({
+          subtaskId,
+          date,
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          category: p.category,
+          dominantApp: p.app,
+          apps: JSON.stringify({ [p.app]: 240, "Chrome": 60 }),
+          workSessionApp: p.app,
+        });
+        bucketCount++;
       }
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask8[0].id,
-        date: today,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category,
-        dominantApp,
-        apps: JSON.stringify(apps),
-        workSessionApp: "Visual Studio Code",
-      });
     }
 
-    console.log(`Created ${12 + 18 + 9 + 12 + 6 + 20} activity buckets for hackathon project`);
-    
-    // Add activity buckets for historical hackathon days
-    console.log('Creating historical hackathon activity buckets...');
-    
-    // Yesterday's activities (focus page backend)
-    const yesterdayDate = yesterday;
-    
-    // Subtask 6 - Database schema design (completed yesterday)
-    const yesterdaySchemaStart = new Date(new Date(yesterday + 'T09:00:00').getTime()); // Started at 9 AM yesterday
-    for (let i = 0; i < 12; i++) { // 1 hour of schema design
-      const bucketStart = new Date(yesterdaySchemaStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask6[0].id,
-        date: yesterdayDate,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: "focus" as const,
-        dominantApp: "Visual Studio Code",
-        apps: JSON.stringify({
-          "Visual Studio Code": 220,
-          "DBDiagram.io": 60,
-          "Chrome": 20
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
+    const focusVSCode = { category: "focus" as const, app: "Visual Studio Code" };
+    const prefocusVSCode = { category: "prefocus" as const, app: "Visual Studio Code" };
+    const distractionSlack = { category: "distraction" as const, app: "Slack" };
+    const idlePattern = { category: "idle" as const, app: "System Idle" };
 
-    // Subtask 7 - CRUD operations (spans 2 days - started yesterday, continued today)
-    // Day 1: Main implementation (yesterday) 
-    const yesterdayCrudStart = new Date(new Date(yesterday + 'T10:00:00').getTime()); // Started at 10 AM yesterday
-    for (let i = 0; i < 24; i++) { // 2 hours yesterday
-      const bucketStart = new Date(yesterdayCrudStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask7[0].id,
-        date: yesterdayDate,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 18 ? (i % 6 === 0 ? "prefocus" as const : "focus" as const) : i < 22 ? "distraction" as const : "idle" as const,
-        dominantApp: i < 18 ? "Visual Studio Code" : i < 22 ? "Slack" : "System Idle",
-        apps: JSON.stringify({
-          "Visual Studio Code": i < 18 ? 200 : i < 22 ? 60 : 0,
-          "Terminal": i < 18 ? 80 : i < 22 ? 20 : 0,
-          "Chrome": i < 18 ? 20 : i < 22 ? 80 : 0,
-          "Slack": i < 18 ? 0 : i < 22 ? 140 : 0,
-          "System Idle": i < 22 ? 0 : 300
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
-    
-    // Day 2: Final touches (today, before timer API work)
-    const todayCrudStart = new Date(now.getTime() - 5 * 60 * 60 * 1000); // 5 hours ago today
-    for (let i = 0; i < 6; i++) { // 30 minutes to finish CRUD
-      const bucketStart = new Date(todayCrudStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask7[0].id,
-        date: today,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 4 ? "focus" as const : "prefocus" as const,
-        dominantApp: "Visual Studio Code",
-        apps: JSON.stringify({
-          "Visual Studio Code": 240,
-          "Terminal": 40,
-          "Chrome": 20
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
+    // courseS1: 11 buckets (~55 min), mostly focus
+    await createBuckets(courseS1.id, daysAgo(3), 9, 11, [focusVSCode, focusVSCode, focusVSCode, prefocusVSCode, focusVSCode]);
+    // courseS2: 8 buckets (~40 min)
+    await createBuckets(courseS2.id, daysAgo(2), 10, 8, [focusVSCode, focusVSCode, prefocusVSCode, focusVSCode]);
+    // courseS3: 10 buckets (~50 min)
+    await createBuckets(courseS3.id, daysAgo(1), 9, 10, [focusVSCode, focusVSCode, focusVSCode, prefocusVSCode, distractionSlack]);
+    // apiS1: 16 buckets (~80 min), good focus with some breaks
+    await createBuckets(apiS1.id, daysAgo(1), 14, 16, [focusVSCode, focusVSCode, focusVSCode, prefocusVSCode, focusVSCode, distractionSlack]);
+    // apiS2: 9 buckets (~45 min, active now)
+    await createBuckets(apiS2.id, today, 10, 9, [focusVSCode, focusVSCode, prefocusVSCode, focusVSCode, focusVSCode, distractionSlack, focusVSCode, prefocusVSCode, idlePattern]);
 
-    // Subtask 5 - Routing and layout (completed 2 days ago, with some distractions)
-    const twoDaysAgoRoutingStart = new Date(new Date(twoDaysAgo + 'T12:00:00').getTime()); // Started at 12 PM two days ago
-    for (let i = 0; i < 24; i++) { // 2 hours of routing setup
-      const bucketStart = new Date(twoDaysAgoRoutingStart.getTime() + i * 5 * 60 * 1000);
-      const bucketEnd = new Date(bucketStart.getTime() + 5 * 60 * 1000);
-      
-      await db.insert(activityBuckets).values({
-        subtaskId: subtask5[0].id,
-        date: twoDaysAgo,
-        startTime: bucketStart.toISOString(),
-        endTime: bucketEnd.toISOString(),
-        category: i < 14 ? "focus" as const : i < 18 ? "prefocus" as const : i < 22 ? "distraction" as const : "idle" as const,
-        dominantApp: i < 18 ? "Visual Studio Code" : i < 22 ? "Chrome" : "System Idle",
-        apps: JSON.stringify({
-          "Visual Studio Code": i < 18 ? 200 : i < 22 ? 40 : 0,
-          "Chrome": i < 18 ? 80 : i < 22 ? 180 : 0,
-          "Terminal": i < 18 ? 20 : i < 22 ? 80 : 0,
-          "System Idle": i < 22 ? 0 : 300
-        }),
-        workSessionApp: "Visual Studio Code",
-      });
-    }
+    console.log(`  Created ${bucketCount} activity buckets`);
 
-    const historicalBuckets = 12 + 24 + 6 + 24; // Yesterday: 12 + 24 + 6, Two days ago: 24
-    console.log(`Created ${historicalBuckets} historical hackathon activity buckets`);
-    
-    console.log(`Created ${12 + 18 + 9 + 18 + 20 + historicalBuckets} total activity buckets for hackathon project`);
-    
-    
-    // Show summary
+    // ── Summary ──────────────────────────────────────────
     const allTasks = await db.select().from(tasks);
     const allSubtasks = await db.select().from(subtasks);
     const allBuckets = await db.select().from(activityBuckets);
+    const allGoals = await db.select().from(goals);
+    const allSessions = await db.select().from(workSessionsHistory);
     
     console.log(`\n=== TEST DATA SUMMARY ===`);
-    console.log(`Tasks: ${allTasks.length} (${allTasks.filter(t => t.isCompleted).length} completed)`);
-    console.log(`Subtasks: ${allSubtasks.length} (${allSubtasks.filter(s => s.isCompleted).length} completed, ${allSubtasks.filter(s => s.isActive).length} active)`);
+    console.log(`Goals: ${allGoals.length}`);
+    console.log(`Tasks: ${allTasks.filter(t => !t.isHabit).length} (${allTasks.filter(t => !t.isHabit && t.isCompleted).length} completed)`);
+    console.log(`Habits: ${allTasks.filter(t => t.isHabit).length}`);
+    console.log(`Subtasks: ${allSubtasks.length} (${allSubtasks.filter(s => s.status === 'completed').length} completed, ${allSubtasks.filter(s => s.status === 'active').length} active)`);
+    console.log(`Work Sessions: ${allSessions.length}`);
     console.log(`Activity Buckets: ${allBuckets.length}`);
-    
-    console.log(`\nScheduled subtasks by day:`);
-    console.log(`  Three days ago (${threeDaysAgo}): ${allSubtasks.filter(s => s.scheduledDate === threeDaysAgo).length}`);
-    console.log(`  Yesterday (${yesterday}): ${allSubtasks.filter(s => s.scheduledDate === yesterday).length}`);
-    console.log(`  Today (${today}): ${allSubtasks.filter(s => s.scheduledDate === today).length}`);
-    console.log(`  Future subtasks: ${allSubtasks.filter(s => s.scheduledDate && new Date(s.scheduledDate) > new Date(today)).length}`);
+    console.log(`\nGoal override variations:`);
+    console.log(`  Inherit from parent: ${allSubtasks.filter(s => !s.overrideGoal).length}`);
+    console.log(`  Override → specific goal: ${allSubtasks.filter(s => s.overrideGoal && s.goalId).length}`);
+    console.log(`  Override → no goal: ${allSubtasks.filter(s => s.overrideGoal && !s.goalId).length}`);
 
   } catch (error) {
     console.error('Error adding test data:', error);
+    throw error;
   }
 }
 

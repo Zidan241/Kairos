@@ -33,5 +33,26 @@ export const dateUtils = {
       start: dateUtils.formatDate(start),
       end: dateUtils.formatDate(end)
     };
-  }
+  },
+
+  // ISO string to decimal hour in local timezone (e.g. 9:30 AM → 9.5)
+  toDecimalHour: (iso: string): number => {
+    const d = new Date(iso);
+    return d.getHours() + d.getMinutes() / 60;
+  },
+
+  // Format hour number to 12h label (e.g. 14 → '2PM')
+  formatHour: (h: number): string => {
+    if (h === 0) return '12AM';
+    if (h < 12) return `${h}AM`;
+    if (h === 12) return '12PM';
+    return `${h - 12}PM`;
+  },
+
+  // Get a Date N days before the given date (defaults to today)
+  daysAgo: (n: number, from: Date = new Date()): Date => {
+    const d = new Date(from);
+    d.setDate(d.getDate() - n);
+    return d;
+  },
 };

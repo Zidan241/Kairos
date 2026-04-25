@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MarkdownEditorV2 } from '@/components/MarkdownEditorV2';
+import { MarkdownEditorV2 } from './MarkdownEditorV2';
 import { useSaveNote, useGetNote } from '@/hooks/useNotes';
 
 interface NoteEditorProps {

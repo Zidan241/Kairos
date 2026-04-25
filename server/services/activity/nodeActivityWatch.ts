@@ -1,9 +1,12 @@
 import * as cron from 'node-cron';
-import { storage } from '../storage';
-import type { ActivityBucket } from '../../../shared/schema';
+import { getActiveSubtask, updateSubtask } from '../subtasks';
+import type { ActivityBucket, InsertActivityBucket } from '../../../shared/schema';
+import { activityBuckets } from '../../../shared/schema';
 import { ACTIVITY_CONFIG, DEFAULT_ACTIVITY_WATCH_URL } from '../../../shared/constants.js';
 import { dateUtils } from '../../../shared/utils';
 import { ActivityWatchService, type AnalysisResult } from './activityWatchService';
+import { db } from '../../core/database';
+import { desc } from 'drizzle-orm';
 
 export class NodeActivityWatchService {
   private static readonly BUCKET_SIZE_MINUTES = ACTIVITY_CONFIG.BUCKET_SIZE_MINUTES;
@@ -66,10 +69,10 @@ export class NodeActivityWatchService {
     const threshold = ACTIVITY_CONFIG.IDLE_AUTO_STOP_BUCKETS;
     if (!threshold || threshold <= 0) return;
 
-    const activeSubtask = await storage.getActiveSubtask();
+    const activeSubtask = await getActiveSubtask();
     if (!activeSubtask) return;
 
-    const recentBuckets = await storage.getLatestBuckets(threshold);
+    const recentBuckets = await getLatestBuckets(threshold);
     if (recentBuckets.length < threshold) return;
 
     const allIdle = recentBuckets
@@ -77,7 +80,7 @@ export class NodeActivityWatchService {
       .every(b => b.category === 'idle');
 
     if (allIdle) {
-      await storage.updateSubtask(activeSubtask.id, { isActive: false });
+      await updateSubtask(activeSubtask.id, { status: 'pending' });
       console.log(`⏹️  Auto-stopped task "${activeSubtask.title}" after ${threshold} consecutive idle buckets (${threshold * NodeActivityWatchService.BUCKET_SIZE_MINUTES} min idle)`);
     }
   }
@@ -98,7 +101,7 @@ export class NodeActivityWatchService {
       const dateStr = dateUtils.formatDate(previousBucketStart);
       
       // Get latest buckets globally for session window context
-      const sessionWindow = await storage.getLatestBuckets(NodeActivityWatchService.SESSION_WINDOW_SIZE);
+      const sessionWindow = await getLatestBuckets(NodeActivityWatchService.SESSION_WINDOW_SIZE);
 
       // Check if we should process this bucket - don't reprocess if the most recent bucket has the same start time
       if (sessionWindow.length > 0) {
@@ -113,7 +116,7 @@ export class NodeActivityWatchService {
 
       console.log('Analysis result:', analysis);
       
-      await storage.createActivityBucket({
+      await createActivityBucket({
         date: dateStr,
         startTime: analysis.startTime,
         endTime: analysis.endTime,
@@ -130,6 +133,31 @@ export class NodeActivityWatchService {
       console.error('❌ Bucket processing error:', e);
     }
   }
+}
+
+// =========================================================================
+// Bucket persistence
+// =========================================================================
+
+async function getLatestBuckets(limit: number = 100): Promise<ActivityBucket[]> {
+  return await db.select()
+    .from(activityBuckets)
+    .orderBy(desc(activityBuckets.startTime))
+    .limit(limit);
+}
+
+// Auto-links to the active subtask if no subtaskId is provided.
+async function createActivityBucket(bucket: InsertActivityBucket): Promise<ActivityBucket> {
+  const activeSubtask = bucket.subtaskId ? null : await getActiveSubtask();
+
+  const bucketToInsert = {
+    ...bucket,
+    subtaskId: bucket.subtaskId || activeSubtask?.id || null
+  };
+
+  const result = await db.insert(activityBuckets).values(bucketToInsert).returning() as ActivityBucket[];
+  if (!result[0]) throw new Error("Failed to create activity bucket");
+  return result[0];
 }
 
 // Singleton instance

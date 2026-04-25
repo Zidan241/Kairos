@@ -1,4 +1,4 @@
-import { type TaskWithMetrics, type SubtaskWithMetrics } from "@shared/metrics";
+import { type TaskWithMetrics, type SubtaskWithMetrics } from "@shared/types";
 import { dateUtils } from "@shared/utils";
 
 export interface TaskProgress {
@@ -37,11 +37,11 @@ function computeTaskProgress(
 
   for (const subtask of subtasks) {
     const worked = getWorked(subtask);
-    const est = subtask.estimatedMinutes;
+    const est = subtask.estimatedMinutes ?? 0;
     totalWorked += worked;
     totalEstimated += est;
 
-    if (subtask.isCompleted) {
+    if (subtask.status === 'completed') {
       weightedProgress += est * 100;
     } else {
       weightedProgress += est * (est > 0 ? Math.min((worked / est) * 100, 90) : 0);
@@ -76,7 +76,7 @@ function aggregateProgress(tasks: TaskWithMetrics[], perTask: (t: TaskWithMetric
 // ---- Tracked time (ActivityWatch) — Planning page & Reports ----
 
 export function calculateTaskProgress(task: TaskWithMetrics): TaskProgress {
-  return computeTaskProgress(task, sub => sub.metrics?.timeBreakdown?.totalMinutes ?? 0);
+  return computeTaskProgress(task, sub => sub.metrics?.timeBreakdown?.trackedMinutes ?? 0);
 }
 
 export function calculateMultipleTasksProgress(tasks: TaskWithMetrics[]): TaskProgress {
@@ -87,7 +87,7 @@ export function calculateMultipleTasksProgress(tasks: TaskWithMetrics[]): TaskPr
 
 export function calculateTaskElapsedProgress(task: TaskWithMetrics, liveElapsedMinutes = 0): TaskProgress {
   return computeTaskProgress(task, sub =>
-    getSessionMinutes(sub) + (sub.isActive ? liveElapsedMinutes : 0)
+    getSessionMinutes(sub) + (sub.status === 'active' ? liveElapsedMinutes : 0)
   );
 }
 
@@ -102,7 +102,7 @@ export function getTodayWorkedMinutes(tasks: TaskWithMetrics[], liveElapsedMinut
   for (const task of tasks) {
     for (const sub of task.subtasks ?? []) {
       total += getSessionMinutes(sub, today);
-      if (sub.isActive) total += liveElapsedMinutes;
+      if (sub.status === 'active') total += liveElapsedMinutes;
     }
   }
   return total;

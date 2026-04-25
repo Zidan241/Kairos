@@ -22,6 +22,20 @@
       "when": 1773190090649,
       "tag": "0002_free_black_tom",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775401569348,
+      "tag": "0003_lumpy_leper_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776087214558,
+      "tag": "0004_gifted_sleeper",
+      "breakpoints": true
     }
   ]
 }

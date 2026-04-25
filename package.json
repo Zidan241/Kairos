@@ -12,7 +12,7 @@
   "homepage": "https://github.com/Zidan241/Kairos#readme",
   "scripts": {
     "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
-    "dev:server": "bun run server/index.ts",
+    "dev:server": "bun run --watch server/index.ts",
     "dev:client": "vite",
     "build": "bun run build:client && bun run build:server",
     "build:client": "vite build",

@@ -5,7 +5,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { NoteEditor } from '@/components/NoteEditor';
+import { NoteEditor } from './NoteEditor';
 import { FileText, Expand } from 'lucide-react';
 import { useLocation } from 'wouter';
 

@@ -1,0 +1,1 @@
+ALTER TABLE `subtasks` ADD `overrideGoal` integer DEFAULT false NOT NULL;

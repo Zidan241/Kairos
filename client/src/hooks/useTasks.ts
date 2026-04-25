@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, subtasksApi, workSessionsApi } from "@/lib/api";
+import { tasksApi, subtasksApi, analyticsApi } from "@/lib/api";
 import { type InsertTask, type Subtask, type InsertSubtask, type UpdateSubtask, type WorkSessionHistory, UpdateTask } from "@shared/schema";
 import { ACTIVITY_CONFIG } from "@shared/constants.js";
-import { TaskWithMetrics } from "@shared/metrics";
+import { TaskWithMetrics } from "@shared/types";
 import { dateUtils } from "@shared/utils";
 
 // ------------------------------------------------
@@ -38,7 +38,7 @@ export function useWorkSessionsByDate(date?: string) {
   const targetDate = date || dateUtils.getTodayDate();
   return useQuery<WorkSessionHistory[]>({
     queryKey: ['work-sessions', targetDate],
-    queryFn: () => workSessionsApi.getByDate(targetDate),
+    queryFn: () => analyticsApi.getWorkSessionsByDate(targetDate),
     staleTime: ACTIVITY_CONFIG.METRICS_CACHE_TIME_MS,
   });
 }
