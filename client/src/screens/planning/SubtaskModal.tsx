@@ -131,10 +131,10 @@ export function SubtaskModal({
               value={formData.goalId}
               onValueChange={(v) => setFormData(prev => ({ ...prev, goalId: v === "inherit" ? "" : v }))}
             >
-              <SelectTrigger><SelectValue placeholder="Inherit from task" /></SelectTrigger>
+              <SelectTrigger className="data-[placeholder]:text-xs data-[placeholder]:italic"><SelectValue placeholder="Inherit from task" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="inherit" className="text-muted-foreground italic">Inherit from task</SelectItem>
-                <SelectItem value="none" className="text-muted-foreground italic">No goal</SelectItem>
+                <SelectItem value="inherit" className="text-xs text-muted-foreground italic">Inherit from task</SelectItem>
+                <SelectItem value="none" className="text-xs text-muted-foreground italic">No goal</SelectItem>
                 {goalsList?.map(g => (
                   <SelectItem key={g.id} value={String(g.id)}>{g.title}</SelectItem>
                 ))}

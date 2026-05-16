@@ -73,16 +73,6 @@ function aggregateProgress(tasks: TaskWithMetrics[], perTask: (t: TaskWithMetric
   };
 }
 
-// ---- Tracked time (ActivityWatch) — Planning page & Reports ----
-
-export function calculateTaskProgress(task: TaskWithMetrics): TaskProgress {
-  return computeTaskProgress(task, sub => sub.metrics?.timeBreakdown?.trackedMinutes ?? 0);
-}
-
-export function calculateMultipleTasksProgress(tasks: TaskWithMetrics[]): TaskProgress {
-  return aggregateProgress(tasks, calculateTaskProgress);
-}
-
 // ---- Elapsed time (work sessions) — Focus page ----
 
 export function calculateTaskElapsedProgress(task: TaskWithMetrics, liveElapsedMinutes = 0): TaskProgress {

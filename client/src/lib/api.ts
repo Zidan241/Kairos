@@ -158,8 +158,8 @@ export const goalsApi = {
     const res = await apiRequest('GET', `/api/goals?archived=${includeArchived}`);
     return res.json();
   },
-  getSummary: async (includeArchived = false): Promise<GoalSummary[]> => {
-    const res = await apiRequest('GET', `/api/goals/summary?archived=${includeArchived}`);
+  getSummary: async (includeArchived = false, days = 30): Promise<GoalSummary[]> => {
+    const res = await apiRequest('GET', `/api/goals/summary?archived=${includeArchived}&days=${days}`);
     return res.json();
   },
   create: async (goal: InsertGoal): Promise<Goal> => {
@@ -195,9 +195,11 @@ export const habitsApi = {
   delete: async (id: number): Promise<void> => {
     await apiRequest('DELETE', `/api/habits/${id}`);
   },
-  getSummary: async (includeArchived = false): Promise<HabitSummary[]> => {
-    const param = includeArchived ? '?includeArchived=true' : '';
-    const res = await apiRequest('GET', `/api/habits/summary${param}`);
+  getSummary: async (includeArchived = false, days = 30): Promise<HabitSummary[]> => {
+    const params = new URLSearchParams();
+    if (includeArchived) params.set('includeArchived', 'true');
+    params.set('days', String(days));
+    const res = await apiRequest('GET', `/api/habits/summary?${params}`);
     return res.json();
   },
   getDetails: async (id: number, days: number = 30): Promise<HabitDetails> => {

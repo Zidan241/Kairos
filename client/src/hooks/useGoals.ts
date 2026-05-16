@@ -14,10 +14,10 @@ export function useGoalsList(includeArchived = false) {
   });
 }
 
-export function useGoalsSummary(includeArchived = false) {
+export function useGoalsSummary(includeArchived = false, days = 30) {
   return useQuery<GoalSummary[]>({
-    queryKey: ['goals', 'summary', includeArchived],
-    queryFn: () => goalsApi.getSummary(includeArchived),
+    queryKey: ['goals', 'summary', includeArchived, days],
+    queryFn: () => goalsApi.getSummary(includeArchived, days),
     staleTime: 60000,
   });
 }

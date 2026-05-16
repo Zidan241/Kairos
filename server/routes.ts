@@ -17,6 +17,13 @@ const asyncHandler = (fn: Function) => (req: any, res: any, next: any) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+function parseDays(raw: string | undefined, fallback = 30): number {
+  const parsed = parseInt(raw as string);
+  if (isNaN(parsed)) return fallback;
+  if (parsed === 0) return 0;
+  return Math.min(Math.max(parsed, 1), 365);
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const router = Router();
 
@@ -146,7 +153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.get("/habits/summary", asyncHandler(async (req: any, res: any) => {
     const includeArchived = req.query.includeArchived === 'true';
-    const summary = await getHabitsSummary(includeArchived);
+    const days = parseDays(req.query.days);
+    const summary = await getHabitsSummary(includeArchived, days);
     res.json(summary);
   }));
 
@@ -186,9 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   router.get("/habits/:id/details", asyncHandler(async (req: any, res: any) => {
-    const parsed = parseInt(req.query.days as string);
-    const rawDays = isNaN(parsed) ? 30 : parsed;
-    const days = rawDays === 0 ? 0 : Math.min(Math.max(rawDays, 1), 365);
+    const days = parseDays(req.query.days);
     const details = await getHabitDetailsWithMetrics(parseInt(req.params.id), days);
     if (!details) {
       return res.status(404).json({ error: "Habit not found" });
@@ -207,7 +213,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.get("/goals/summary", asyncHandler(async (req: any, res: any) => {
     const includeArchived = req.query.archived !== 'false';
-    res.json(await getGoalsSummary(includeArchived));
+    const days = parseDays(req.query.days);
+    res.json(await getGoalsSummary(includeArchived, days));
   }));
 
   router.post("/goals", asyncHandler(async (req: any, res: any) => {
@@ -232,9 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   router.get("/goals/:id/details", asyncHandler(async (req: any, res: any) => {
-    const parsed = parseInt(req.query.days as string);
-    const rawDays = isNaN(parsed) ? 30 : parsed;
-    const days = rawDays === 0 ? 0 : Math.min(Math.max(rawDays, 1), 365);
+    const days = parseDays(req.query.days);
     const details = await getGoalDetailsWithMetrics(parseInt(req.params.id), days);
     if (!details) {
       return res.status(404).json({ error: "Goal not found" });

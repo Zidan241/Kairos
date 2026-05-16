@@ -59,10 +59,10 @@ export interface TaskWithMetrics extends Task {
 // ----------------------------
 
 export interface HabitSummary extends Habit {
-  progress: { completedCount: number; totalMinutes: number };
+  workedMinutes: number;
   streak: number;
   isDueToday: boolean;
-  completionRate: { completed: number; total: number };
+  completionRate: { done: number; due: number };
   history: Array<{ date: string; status: HabitDayStatus; minutes: number }>;
 }
 
@@ -82,12 +82,10 @@ export interface HabitDetails {
 // ----------------------------
 
 export interface GoalSummary extends Goal {
-  stats: {
-    totalMinutes: number;
-    subtaskCount: number;
-    completedSubtaskCount: number;
-    habitCount: number;
-  };
+  workedMinutes: number;
+  subtaskCount: number;
+  completedSubtaskCount: number;
+  habitCount: number;
 }
 
 export interface GoalDetails {

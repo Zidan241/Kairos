@@ -55,11 +55,12 @@ export async function deleteGoal(id: number): Promise<boolean> {
 // Exports — Summary
 // =========================================================================
 
-export async function getGoalsSummary(includeArchived = false): Promise<GoalSummary[]> {
+export async function getGoalsSummary(includeArchived = false, days = 30): Promise<GoalSummary[]> {
   const allGoals = await getGoals(includeArchived);
   if (allGoals.length === 0) return [];
 
   const goalIds = allGoals.map(g => g.id);
+  const startDate = days === 0 ? null : dateUtils.formatDate(dateUtils.daysAgo(days - 1, new Date()));
 
   // 1. Tasks linked to these goals (for habit count)
   const allLinkedTasks = await db.select().from(tasks)
@@ -89,7 +90,10 @@ export async function getGoalsSummary(includeArchived = false): Promise<GoalSumm
   }).from(workSessionsHistory)
     .innerJoin(subtasks, eq(workSessionsHistory.subtaskId, subtasks.id))
     .innerJoin(tasks, eq(subtasks.parentTaskId, tasks.id))
-    .where(effectiveGoalWhere(goalIds))
+    .where(and(
+      effectiveGoalWhere(goalIds),
+      ...(startDate ? [gte(workSessionsHistory.date, startDate)] : []),
+    ))
     .groupBy(effectiveGoalId);
 
   const minutesByGoal = new Map<number, number>();
@@ -103,12 +107,10 @@ export async function getGoalsSummary(includeArchived = false): Promise<GoalSumm
     const sc = subtaskCountsByGoal.get(goal.id) ?? { total: 0, completed: 0 };
     return {
       ...goal,
-      stats: {
-        totalMinutes: minutesByGoal.get(goal.id) ?? 0,
-        subtaskCount: sc.total,
-        completedSubtaskCount: sc.completed,
-        habitCount: linked.filter(t => t.isHabit).length,
-      },
+      workedMinutes: minutesByGoal.get(goal.id) ?? 0,
+      subtaskCount: sc.total,
+      completedSubtaskCount: sc.completed,
+      habitCount: linked.filter(t => t.isHabit).length,
     };
   });
 }
@@ -126,7 +128,7 @@ export async function getGoalDetailsWithMetrics(goalId: number, days: number = 3
   const startDate = days === 0 ? new Date(goal.createdAt) : dateUtils.daysAgo(days - 1, today);
   const startStr = dateUtils.formatDate(startDate);
 
-  // 1. Linked habits (task-level)
+  // 1. Linked habits (task-level only — habit subtasks don't use overrideGoal)
   const linkedHabits = await db.select().from(tasks)
     .where(and(eq(tasks.goalId, goalId), eq(tasks.isHabit, true)));
 
@@ -164,7 +166,8 @@ export async function getGoalDetailsWithMetrics(goalId: number, days: number = 3
   }
 
   // 4. Activity buckets → time breakdown (within date range)
-  const totalWorked = [...minutesBySubtask.values()].reduce((sum, m) => sum + m, 0);
+  let totalWorked = 0;
+  minutesBySubtask.forEach(m => { totalWorked += m; });
   const buckets = subIds.length > 0
     ? await db.select({
         category: activityBuckets.category,

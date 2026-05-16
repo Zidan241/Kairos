@@ -9,10 +9,10 @@ function invalidateHabits(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ['subtasks'] });
 }
 
-export function useHabitsSummary(includeArchived = false) {
+export function useHabitsSummary(includeArchived = false, days = 30) {
   return useQuery<HabitSummary[]>({
-    queryKey: ['habits', 'summary', includeArchived],
-    queryFn: () => habitsApi.getSummary(includeArchived),
+    queryKey: ['habits', 'summary', includeArchived, days],
+    queryFn: () => habitsApi.getSummary(includeArchived, days),
     staleTime: ACTIVITY_CONFIG.METRICS_CACHE_TIME_MS,
   });
 }

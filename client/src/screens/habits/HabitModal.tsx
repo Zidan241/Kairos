@@ -228,9 +228,9 @@ export function HabitModal({ open, onOpenChange, onSubmit, isLoading, existingHa
               value={formData.goalId}
               onValueChange={(v) => setFormData(prev => ({ ...prev, goalId: v === "none" ? "" : v }))}
             >
-              <SelectTrigger><SelectValue placeholder="No goal" /></SelectTrigger>
+              <SelectTrigger className="data-[placeholder]:text-xs data-[placeholder]:italic"><SelectValue placeholder="No goal" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No goal</SelectItem>
+                <SelectItem value="none" className="text-xs text-muted-foreground italic">No goal</SelectItem>
                 {goalsList?.map(g => (
                   <SelectItem key={g.id} value={String(g.id)}>{g.title}</SelectItem>
                 ))}

@@ -71,7 +71,7 @@ function walkStreaks(habit: Habit, dateMap: DateStatusMap, start: Date, end: Dat
   const cursor = new Date(start);
 
   while (cursor <= end) {
-    if (isHabitDueOnDate(habit, cursor)) {
+    if (isHabitScheduledOnDate(habit, cursor)) {
       const status = dateMap.get(dateUtils.formatDate(cursor))?.status;
       if (status === 'completed') {
         consecutiveSkips = 0;
@@ -95,12 +95,20 @@ function walkStreaks(habit: Habit, dateMap: DateStatusMap, start: Date, end: Dat
 // Cleared on habit create/update/delete so the next call re-evaluates.
 let lastEnsuredDate: string | null = null;
 
-export function isHabitDueOnDate(habit: Habit, date: Date): boolean {
-  if (habit.isArchived) return false;
+// Internal: checks schedule only (endDate + frequency). Used for historical
+// calculations where archived habits still need their past days evaluated.
+function isHabitScheduledOnDate(habit: Habit, date: Date): boolean {
   const dateStr = dateUtils.formatDate(date);
   if (habit.endDate && dateStr > habit.endDate) return false;
   const schedule = getScheduleForDate(habit, dateStr);
   return schedule ? isScheduledDay(schedule.frequency, schedule.customDays, date) : false;
+}
+
+// Public: also excludes archived habits. Use for forward-looking logic
+// (ensureHabitSubtasksForToday, isDueToday).
+export function isHabitDueOnDate(habit: Habit, date: Date): boolean {
+  if (habit.isArchived) return false;
+  return isHabitScheduledOnDate(habit, date);
 }
 
 // Creates today's subtask for each due habit (if not already present).
@@ -211,16 +219,17 @@ export async function deleteHabit(id: number): Promise<boolean> {
 // Exports — Summary
 // =========================================================================
 
-export async function getHabitsSummary(includeArchived = false): Promise<HabitSummary[]> {
+export async function getHabitsSummary(includeArchived = false, days = 30): Promise<HabitSummary[]> {
   const now = new Date();
   const today = dateUtils.getTodayDate();
+  const startDate = days === 0 ? null : dateUtils.daysAgo(days - 1, now);
+  const startStr = startDate ? dateUtils.formatDate(startDate) : null;
 
   // 1. Load all habits
   const allHabits = await getHabits(includeArchived);
   if (allHabits.length === 0) return [];
 
   const habitIds = allHabits.map(h => h.id);
-  const weekRange = dateUtils.getWeekRange(0);
 
   // 2. Fetch subtask records (last 365 days) and index by habit → date
   const lookbackDate = dateUtils.daysAgo(365, now);
@@ -244,10 +253,7 @@ export async function getHabitsSummary(includeArchived = false): Promise<HabitSu
     subtasksByHabit.get(row.parentTaskId)!.set(row.scheduledDate, row);
   }
 
-  // 3. Fetch session minutes for last 7 days (history sparkline)
-  const historyStart = dateUtils.daysAgo(6, now);
-  const historyStartStr = dateUtils.formatDate(historyStart);
-
+  // 3. Fetch session minutes (scoped to days param for workedMinutes, history sparkline uses last 7 days from the map)
   const sessionRows = await db.select({
     parentTaskId: subtasks.parentTaskId,
     date: workSessionsHistory.date,
@@ -256,7 +262,7 @@ export async function getHabitsSummary(includeArchived = false): Promise<HabitSu
     .innerJoin(subtasks, eq(workSessionsHistory.subtaskId, subtasks.id))
     .where(and(
       inArray(subtasks.parentTaskId, habitIds),
-      gte(workSessionsHistory.date, historyStartStr),
+      ...(startStr ? [gte(workSessionsHistory.date, startStr)] : []),
       lte(workSessionsHistory.date, today),
     ))
     .groupBy(subtasks.parentTaskId, workSessionsHistory.date);
@@ -272,27 +278,27 @@ export async function getHabitsSummary(includeArchived = false): Promise<HabitSu
     const dateMap = subtasksByHabit.get(habit.id)!;
     const habitMinutes = minutesMap.get(habit.id)!;
 
-    // 4a. Progress: completed count + total minutes in the current period
-    const periodRange = habit.frequency === 'weekly' ? weekRange : { start: today, end: today };
-    let completedCount = 0;
-    let totalMinutes = 0;
+    // 4a. Completion rate — walk calendar days within the `days` window
+    //     so missed days (due but no subtask record) are correctly counted.
     let totalCompleted = 0;
     let totalDue = 0;
-    dateMap.forEach((entry, date) => {
-      if (date >= periodRange.start && date <= periodRange.end && entry.status === 'completed') completedCount++;
-      if (entry.status === 'completed') totalCompleted++;
-      totalDue++;
-    });
-    habitMinutes.forEach((mins, date) => {
-      if (date >= periodRange.start && date <= periodRange.end) totalMinutes += mins;
-    });
+    const rateStart = startDate ?? new Date(habit.createdAt);
+    const rateCursor = new Date(rateStart);
+    while (rateCursor <= now) {
+      if (isHabitScheduledOnDate(habit, rateCursor)) {
+        totalDue++;
+        const dStr = dateUtils.formatDate(rateCursor);
+        if (dateMap.get(dStr)?.status === 'completed') totalCompleted++;
+      }
+      rateCursor.setDate(rateCursor.getDate() + 1);
+    }
 
     // 4b. History: last 7 calendar days — includes missed days (due but no record)
     const history: HabitSummary['history'] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
-      if (!isHabitDueOnDate(habit, d)) continue;
+      if (!isHabitScheduledOnDate(habit, d)) continue;
       const dStr = dateUtils.formatDate(d);
       const entry = dateMap.get(dStr);
       const status: HabitDayStatus = entry
@@ -305,12 +311,16 @@ export async function getHabitsSummary(includeArchived = false): Promise<HabitSu
       });
     }
 
+    // 4c. Total worked minutes across all fetched days
+    let workedMinutes = 0;
+    habitMinutes.forEach((mins) => { workedMinutes += mins; });
+
     return {
       ...habit,
-      progress: { completedCount, totalMinutes },
+      workedMinutes,
       streak: walkStreaks(habit, dateMap, lookbackDate, now).current,
       isDueToday: isHabitDueOnDate(habit, now),
-      completionRate: { completed: totalCompleted, total: totalDue },
+      completionRate: { done: totalCompleted, due: totalDue },
       history,
     };
   });
@@ -351,7 +361,7 @@ export async function getHabitDetailsWithMetrics(habitId: number, days: number =
 
   const cursor = new Date(startDate);
   while (cursor <= today) {
-    if (isHabitDueOnDate(habit, cursor)) {
+    if (isHabitScheduledOnDate(habit, cursor)) {
       const dStr = dateUtils.formatDate(cursor);
       const status = dateMap.get(dStr)?.status;
       const isToday = dStr === todayStr;
@@ -384,16 +394,16 @@ export async function getHabitDetailsWithMetrics(habitId: number, days: number =
       .where(inArray(activityBuckets.subtaskId, subtaskIds))
       .orderBy(activityBuckets.startTime);
 
-    // Total worked minutes
-    const workedRows = await db.select({
+    // Total worked minutes from work sessions (for timeBreakdown)
+    const sessionRows = await db.select({
       total: sql<number>`COALESCE(SUM(${workSessionsHistory.durationMinutes}), 0)`,
     }).from(workSessionsHistory)
       .where(inArray(workSessionsHistory.subtaskId, subtaskIds));
-    const totalWorked = Math.round(workedRows[0]?.total ?? 0);
+    const totalWorked = Math.round(sessionRows[0]?.total ?? 0);
 
     timeBreakdown = calculateTimeBreakdown(allBuckets, totalWorked);
 
-    // Per-subtask tracked minutes (for perDay mapping)
+    // Per-subtask tracked minutes from AW buckets
     for (const b of allBuckets) {
       if (!b.subtaskId) continue;
       const mins = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 60000;

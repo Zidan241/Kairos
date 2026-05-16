@@ -31,8 +31,9 @@ import {
 } from "lucide-react";
 import { SubtaskWithMetrics, type TaskWithMetrics } from "@shared/types";
 import { type Subtask } from "@shared/schema";
-import { calculateTaskElapsedProgress, getSessionMinutes } from "@/lib/taskUtils";
+import { calculateTaskElapsedProgress } from "@/lib/taskUtils";
 import { TaskHelpers } from "@/lib/taskHelpers";
+import { TimeBreakdownRow } from "@/components/TimeBreakdownRow";
 import { NotesPanel } from "@/components/NotesPanel";
 import { useState } from "react";
 
@@ -262,22 +263,18 @@ export default function TaskCard({
                           )}
                           <div className="flex items-center gap-3">
                             {(() => {
-                              const worked = getSessionMinutes(subtask);
+                              const worked = subtask.metrics.timeBreakdown.workedMinutes;
                               const est = subtask.estimatedMinutes ?? 0;
                               const pct = est > 0 ? (worked / est) * 100 : 0;
                               return (
                                 <span className="text-xs flex items-center gap-1" title="Work session time">
                                   <Clock className="h-3 w-3 text-muted-foreground" />
                                   <span className={TaskHelpers.getStatusColor(isSubtaskCompleted, est > 0 && worked > est, pct)}>
-                                    {TaskHelpers.formatTime(worked)}{est > 0 && <> / {TaskHelpers.formatTime(est)}</>}
+                                    {TaskHelpers.formatTime(worked)} / {TaskHelpers.formatTime(est)}
                                   </span>
                                 </span>
                               );
                             })()}
-                            <span className="text-muted-foreground/40">•</span>
-                            <span className="text-xs flex items-center gap-1" title="ActivityWatch tracked time">
-                              <span className="text-muted-foreground">{TaskHelpers.formatTime(subtask.metrics.timeBreakdown.trackedMinutes)} tracked</span>
-                            </span>
                             {subtask.overrideGoal && (
                               subtask.goal
                                 ? subtask.goal.id !== task.goalId && (<>
@@ -370,64 +367,21 @@ export default function TaskCard({
                               </AccordionTrigger>
                               <AccordionContent>
                                 {/* Total Summary */}
-                                <div className="mb-4 p-3 bg-muted/20 rounded-md border text-xs">
-                                  <div className="flex justify-between items-center">
-                                    <div className="text-muted-foreground">
-                                      <span className="font-medium">Productivity: </span>
-                                      <span className="font-bold">
-                                        {subtask.metrics.timeBreakdown.trackedMinutes > 0
-                                          ? `${Math.round(subtask.metrics.timeBreakdown.productivityRatio * 100)}%`
-                                          : '–'}
-                                      </span>
-                                    </div>
-                                    <div className="flex gap-3 text-xs text-muted-foreground">
-                                      <span>Focus: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.focusMinutes)}</span>
-                                      <span>Distraction: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.distractionMinutes)}</span>
-                                      <span>Idle: {TaskHelpers.formatTime(subtask.metrics.timeBreakdown.idleMinutes)}</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <TimeBreakdownRow breakdown={subtask.metrics.timeBreakdown} showWorked variant="card" className="mb-4" />
                                 
                                 <div className="space-y-3">
-                                  {(() => {
-                                    // Merge dates from schedule breakdowns and work sessions
-                                    const scheduleByDate: Record<string, typeof subtask.metrics.scheduleBreakdown[0]> = {};
-                                    for (const sb of subtask.metrics.scheduleBreakdown) {
-                                      scheduleByDate[sb.date] = sb;
-                                    }
-                                    const dateSet: Record<string, true> = {};
-                                    for (const d of Object.keys(scheduleByDate)) dateSet[d] = true;
-                                    for (const s of subtask.metrics?.workSessions ?? []) dateSet[s.date] = true;
-                                    const allDates = Object.keys(dateSet).sort();
-
-                                    return allDates.map((date) => {
-                                      const breakdown = scheduleByDate[date];
-                                      const dayWorked = getSessionMinutes(subtask, date);
-                                      const tracked = breakdown?.timeBreakdown.trackedMinutes ?? 0;
-                                      return (
-                                      <div key={date} className="border rounded-md p-3 bg-background/30">
+                                  {subtask.metrics.scheduleBreakdown.map((breakdown) => (
+                                      <div key={breakdown.date} className="border rounded-md p-3 bg-background/30">
                                         <div className="flex justify-between items-center mb-2">
                                           <span className="text-sm font-medium text-muted-foreground">
-                                            {new Date(date).toLocaleDateString()}
+                                            {new Date(breakdown.date).toLocaleDateString()}
                                           </span>
-                                          <div className="flex gap-3 text-xs text-muted-foreground">
-                                            <span className="font-medium">{TaskHelpers.formatTime(dayWorked)}</span>
-                                            <span>•</span>
-                                            <span className="font-medium">Tracked: {TaskHelpers.formatTime(tracked)}</span>
-                                            {breakdown && tracked > 0 && (
-                                              <>
-                                                <span>•</span>
-                                                <span>Focus: {TaskHelpers.formatTime(breakdown.timeBreakdown.focusMinutes)}</span>
-                                                <span>Distraction: {TaskHelpers.formatTime(breakdown.timeBreakdown.distractionMinutes)}</span>
-                                                <span>Idle: {TaskHelpers.formatTime(breakdown.timeBreakdown.idleMinutes)}</span>
-                                              </>
-                                            )}
-                                          </div>
+                                          <TimeBreakdownRow breakdown={breakdown.timeBreakdown} showWorked showProductivity={false} />
                                         </div>
-                                        {breakdown && breakdown.apps && breakdown.apps.length > 0 && (
+                                        {breakdown.apps && breakdown.apps.length > 0 && (
                                         <div className="space-y-1">
                                           {TaskHelpers.groupAppsByUsage(breakdown.apps).map((app, index) => (
-                                              <div key={`${date}-${app.app}-${index}`} className="flex justify-between p-1.5 rounded-md bg-background/50 border">
+                                              <div key={`${breakdown.date}-${app.app}-${index}`} className="flex justify-between p-1.5 rounded-md bg-background/50 border">
                                                 <span className="text-xs font-medium">{app.app}</span>
                                                 <div className="flex gap-3">
                                                   <span className="text-xs text-muted-foreground">
@@ -442,9 +396,7 @@ export default function TaskCard({
                                         </div>
                                         )}
                                       </div>
-                                    );
-                                    });
-                                  })()}
+                                  ))}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>

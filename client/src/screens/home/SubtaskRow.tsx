@@ -29,7 +29,7 @@ export function SubtaskRow({
   const todayWorked = getSessionMinutes(subtask, today) + elapsed;
 
   // All-time worked time (for progress — estimate is total, not per-day)
-  const totalWorked = getSessionMinutes(subtask) + elapsed;
+  const totalWorked = subtask.metrics.timeBreakdown.workedMinutes + elapsed;
 
   const est = subtask.estimatedMinutes ?? 0;
   const overallProgress = est > 0 ? Math.min((totalWorked / est) * 100, 100) : 0;
@@ -81,7 +81,7 @@ export function SubtaskRow({
 
       <span className="text-[11px] text-muted-foreground tabular-nums">
         <span className={TaskHelpers.getStatusColor(isCompleted, isOverEstimate, overallProgress)}>
-          {TaskHelpers.formatTime(totalWorked)}{est > 0 && <> / {TaskHelpers.formatTime(est)}</>}
+          {TaskHelpers.formatTime(totalWorked)} / {TaskHelpers.formatTime(est)}
         </span>
         {hasPriorWork && (
           <span className="text-muted-foreground/50"> · {TaskHelpers.formatTime(todayWorked)} today</span>
