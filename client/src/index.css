@@ -98,6 +98,21 @@ html.macos-electron .fixed.inset-y-0[role="dialog"] {
 
   --destructive-foreground: 0 0% 98%;
 
+  /* Semantic status colors */
+  --success: 142 71% 45%;
+  --success-foreground: 142 76% 26%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 32 95% 34%;
+  --danger: 0 84% 60%;
+  --danger-foreground: 0 72% 42%;
+  --info: 212 100% 50%;
+  --info-foreground: 212 92% 40%;
+  --active: 271 81% 56%;
+  --active-foreground: 271 70% 40%;
+  --neutral: 220 13% 60%;
+  --neutral-foreground: 220 9% 40%;
+  --overlay: 0 0% 0%;
+
   --input: 220 13% 83%;
   --ring: 212 100% 50%;
   --chart-1: 212 100% 45%;
@@ -215,6 +230,21 @@ html.macos-electron .fixed.inset-y-0[role="dialog"] {
   --destructive: 0 84% 60%;
 
   --destructive-foreground: 0 0% 98%;
+
+  /* Semantic status colors */
+  --success: 142 71% 45%;
+  --success-foreground: 142 76% 55%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 38 92% 65%;
+  --danger: 0 84% 60%;
+  --danger-foreground: 0 84% 68%;
+  --info: 212 100% 50%;
+  --info-foreground: 212 100% 70%;
+  --active: 271 81% 56%;
+  --active-foreground: 271 81% 72%;
+  --neutral: 220 9% 50%;
+  --neutral-foreground: 220 9% 60%;
+  --overlay: 0 0% 0%;
 
   /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
   --input: 220 15% 35%;

@@ -122,21 +122,21 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <CardContent className="space-y-6">
                 <div className="grid gap-4">
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-status-success mt-0.5" />
                     <div>
                       <p className="font-medium">Plan Your Day</p>
                       <p className="text-sm text-muted-foreground">Schedule tasks and subtasks into your daily timeline</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-status-success mt-0.5" />
                     <div>
                       <p className="font-medium">Track Your Focus</p>
                       <p className="text-sm text-muted-foreground">Automatic focus detection with ActivityWatch integration</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-status-success mt-0.5" />
                     <div>
                       <p className="font-medium">Review Your Progress</p>
                       <p className="text-sm text-muted-foreground">Daily, weekly, and monthly productivity reports</p>
@@ -173,7 +173,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                       Checking...
                     </Badge>
                   ) : awRunning ? (
-                    <Badge variant="default" className="gap-2 bg-green-500">
+                    <Badge variant="default" className="gap-2 bg-status-success">
                       <CheckCircle2 className="h-3 w-3" />
                       ActivityWatch Running
                     </Badge>
@@ -254,8 +254,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           {currentStep === "ready" && (
             <>
               <CardHeader className="text-center pb-2">
-                <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="h-8 w-8 text-green-500" />
+                <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-status-success/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-8 w-8 text-status-success" />
                 </div>
                 <CardTitle className="text-2xl">You're All Set!</CardTitle>
                 <CardDescription className="text-base">

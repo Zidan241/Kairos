@@ -117,7 +117,7 @@ export default function Reports() {
             <span className="text-sm">
               {reflectSummary ? (
                 reflectSummary.habits.due > 0
-                  ? <>Habits: <span className="font-medium">{reflectSummary.habits.done} done</span> · <span className="text-yellow-500">{reflectSummary.habits.skipped} skipped</span> · {reflectSummary.habits.missed} missed</>
+                  ? <>Habits: <span className="font-medium">{reflectSummary.habits.done} done</span> · <span className="text-status-warning">{reflectSummary.habits.skipped} skipped</span> · {reflectSummary.habits.missed} missed</>
                   : <>Habits: <span className="text-muted-foreground">0 due</span></>
               ) : (
                 <span className="text-muted-foreground">Habits: —</span>

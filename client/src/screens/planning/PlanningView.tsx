@@ -93,9 +93,9 @@ export default function PlanningView() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="text-red-500 mb-2">⚠️</div>
+          <div className="text-status-danger mb-2">⚠️</div>
           <p className="text-muted-foreground">Failed to load tasks</p>
-          <p className="text-sm text-red-500">{error.message}</p>
+          <p className="text-sm text-status-danger">{error.message}</p>
         </div>
       </div>
     );

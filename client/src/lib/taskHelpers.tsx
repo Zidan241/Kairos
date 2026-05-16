@@ -62,13 +62,13 @@ export class TaskHelpers {
 
   static getBadgeTheme = (type: 'completed' | 'waiting' | 'active' | 'in-progress' | 'priority' | 'deadline-urgent' | 'deadline-warning') => {
     const themes = {
-      completed: "bg-green-500/10 text-green-700 border-green-500/20 dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/30",
+      completed: "bg-status-success/10 text-status-success-foreground border-status-success/20",
       waiting: "bg-muted/50 text-muted-foreground border-muted-foreground/20 dark:bg-muted/30 dark:text-muted-foreground dark:border-muted-foreground/30",
-      active: "bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30",
-      'in-progress': "bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30",
-      priority: "bg-purple-500/10 text-purple-700 border-purple-500/20 dark:bg-purple-500/20 dark:text-purple-400 dark:border-purple-500/30",
-      'deadline-urgent': "bg-red-500/10 text-red-700 border-red-500/20 dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/30",
-      'deadline-warning': "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30"
+      active: "bg-status-info/10 text-status-info-foreground border-status-info/20",
+      'in-progress': "bg-status-info/10 text-status-info-foreground border-status-info/20",
+      priority: "bg-status-active/10 text-status-active-foreground border-status-active/20",
+      'deadline-urgent': "bg-status-danger/10 text-status-danger-foreground border-status-danger/20",
+      'deadline-warning': "bg-status-warning/10 text-status-warning-foreground border-status-warning/20"
     };
     return themes[type];
   };

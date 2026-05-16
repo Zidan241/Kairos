@@ -58,15 +58,15 @@ function DayTrackerDots({ history }: { history?: HabitSummary['history'] }) {
           if (entry) {
             switch (entry.status) {
               case 'completed':
-                bg = 'bg-emerald-500';
+                bg = 'bg-status-success';
                 title = `${dateLabel}: Done`;
                 break;
               case 'skipped':
-                bg = 'bg-yellow-500';
+                bg = 'bg-status-warning';
                 title = `${dateLabel}: Skipped`;
                 break;
               case 'missed':
-                bg = 'bg-red-400/60';
+                bg = 'bg-status-danger/60';
                 title = `${dateLabel}: Missed`;
                 break;
               default:
@@ -97,9 +97,9 @@ function DayTrackerDots({ history }: { history?: HabitSummary['history'] }) {
 
 function StatusIcon({ status }: { status: HabitDayStatus }) {
   switch (status) {
-    case 'completed': return <Check className="h-3 w-3 text-emerald-500" />;
-    case 'skipped': return <SkipForward className="h-3 w-3 text-yellow-500" />;
-    case 'missed': return <X className="h-3 w-3 text-red-400/60" />;
+    case 'completed': return <Check className="h-3 w-3 text-status-success" />;
+    case 'skipped': return <SkipForward className="h-3 w-3 text-status-warning" />;
+    case 'missed': return <X className="h-3 w-3 text-status-danger/60" />;
     case 'pending': return <Circle className="h-3 w-3 text-muted-foreground" />;
   }
 }
@@ -177,7 +177,7 @@ export function HabitRow({ habit, days, onEdit }: {
                     <span>{habit.completionRate.completed}/{habit.completionRate.total}</span>
                   )}
                   {habit.streak > 0 && (
-                    <span className="flex items-center gap-0.5 text-orange-500 font-medium">
+                    <span className="flex items-center gap-0.5 text-status-warning font-medium">
                       <Flame className="h-3 w-3" /> {habit.streak}
                     </span>
                   )}

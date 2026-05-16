@@ -58,7 +58,7 @@ export default function HabitsSummary() {
         {streaksAtRisk.length > 0 && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t">
             {streaksAtRisk.map(h => (
-              <div key={h.id} className="flex items-center gap-1.5 text-xs text-orange-500">
+              <div key={h.id} className="flex items-center gap-1.5 text-xs text-status-warning">
                 <AlertTriangle className="h-3 w-3" />
                 <span>{h.title}</span>
                 <span className="flex items-center gap-0.5">

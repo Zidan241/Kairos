@@ -168,21 +168,21 @@ export default function MonthReport({ aggregateData, isLoading }: MonthReportPro
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-start gap-3">
-              <Award className="h-5 w-5 text-yellow-500 mt-0.5" />
+              <Award className="h-5 w-5 text-status-warning mt-0.5" />
               <div>
                 <p className="font-medium">Focus Master</p>
                 <p className="text-sm text-muted-foreground">Achieved 90%+ productivity for 5 consecutive days</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <Target className="h-5 w-5 text-blue-500 mt-0.5" />
+              <Target className="h-5 w-5 text-status-info mt-0.5" />
               <div>
                 <p className="font-medium">Goal Crusher</p>
                 <p className="text-sm text-muted-foreground">Completed 3 out of 4 monthly goals</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <TrendingUp className="h-5 w-5 text-green-500 mt-0.5" />
+              <TrendingUp className="h-5 w-5 text-status-success mt-0.5" />
               <div>
                 <p className="font-medium">Consistency Champion</p>
                 <p className="text-sm text-muted-foreground">Maintained daily productivity tracking for 30 days</p>

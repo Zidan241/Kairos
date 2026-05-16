@@ -46,17 +46,17 @@ export default function TimelineChart({ data }: TimelineChartProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'focus': return 'bg-green-500/75';
-      case 'prefocus': return 'bg-green-300/60';
-      case 'distraction': return 'bg-red-400/75';
-      case 'idle': return 'bg-slate-400/50';
+      case 'focus': return 'bg-status-success/75';
+      case 'prefocus': return 'bg-status-success/50';
+      case 'distraction': return 'bg-status-danger/75';
+      case 'idle': return 'bg-status-neutral/50';
       case 'untracked': return '';
       default: return 'bg-muted';
     }
   };
 
   const getUntrackedStyle = (): React.CSSProperties => ({
-    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(150,150,150,0.15) 3px, rgba(150,150,150,0.15) 6px)',
+    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 3px, hsl(var(--neutral) / 0.15) 3px, hsl(var(--neutral) / 0.15) 6px)',
   });
 
   const getStatusLabel = (status: string) => {
@@ -103,19 +103,19 @@ export default function TimelineChart({ data }: TimelineChartProps) {
           {/* Legend */}
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500/75"></div>
+              <div className="w-4 h-4 rounded bg-status-success/75"></div>
               <span>Focus</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-300/60"></div>
+              <div className="w-4 h-4 rounded bg-status-success/50"></div>
               <span>Pre Focus</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-red-400/75"></div>
+              <div className="w-4 h-4 rounded bg-status-danger/75"></div>
               <span>Distracted</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-slate-400/50"></div>
+              <div className="w-4 h-4 rounded bg-status-neutral/50"></div>
               <span>Idle</span>
             </div>
             <div className="flex items-center gap-2">

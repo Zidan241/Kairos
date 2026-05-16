@@ -40,11 +40,11 @@ export default function TrackingStatus() {
   } else if (connected) {
     icon = <Radio className="h-3.5 w-3.5" />;
     label = "Tracking";
-    color = "text-green-500";
+    color = "text-status-success";
   } else if (paused) {
     icon = <Pause className="h-3.5 w-3.5" />;
     label = "Paused";
-    color = "text-amber-500";
+    color = "text-status-warning";
   } else {
     icon = <WifiOff className="h-3.5 w-3.5" />;
     label = "Disconnected";

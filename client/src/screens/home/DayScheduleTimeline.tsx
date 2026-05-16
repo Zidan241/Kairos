@@ -367,7 +367,7 @@ export default function DayScheduleTimeline({
               {sessionBlocks.map((block) => (
                 <div
                   key={`session-${block.id}`}
-                  className="absolute right-0 w-[3px] bg-green-500 rounded-full pointer-events-none z-20"
+                  className="absolute right-0 w-[3px] bg-status-success rounded-full pointer-events-none z-20"
                   style={{ top: `${block.top}%`, height: `${block.height}%` }}
                 />
               ))}
@@ -390,8 +390,8 @@ export default function DayScheduleTimeline({
                 >
                   {/* Subtle but visible drop zone */}
                   {(draggedTask || draggedFromOutside) && (
-                    <div className="absolute inset-0 border border-blue-300/60 bg-blue-50/30 opacity-40 hover:opacity-80 transition-all duration-200 flex items-center justify-center">
-                      <span className="text-xs text-blue-600 bg-white/70 px-1.5 py-0.5 rounded">
+                    <div className="absolute inset-0 border border-status-info/60 bg-status-info/10 opacity-40 hover:opacity-80 transition-all duration-200 flex items-center justify-center">
+                      <span className="text-xs text-status-info-foreground bg-background/70 px-1.5 py-0.5 rounded">
                         {slot.label}
                       </span>
                     </div>
@@ -406,7 +406,7 @@ export default function DayScheduleTimeline({
                   className="absolute left-0 right-0 z-30 pointer-events-none"
                   style={{ top: `${currentTimePosition}%` }}
                 >
-                  <div className="flex-1 h-[2px] bg-blue-500 shadow-sm" />
+                  <div className="flex-1 h-[2px] bg-status-info shadow-sm" />
                 </div>
               )}
 
@@ -421,8 +421,8 @@ export default function DayScheduleTimeline({
                 return (
                   <div
                     key={subtask.id}
-                    className={`absolute bg-background border border-border rounded-md shadow-sm transition-all duration-200 overflow-hidden border-l-4 border-l-blue-400 cursor-move hover:shadow-lg ${isCompact ? 'px-2 py-0.5' : 'px-2 py-1'
-                      } ${isDragging ? 'opacity-50 scale-105 shadow-lg border-blue-400' : ''
+                    className={`absolute bg-background border border-border rounded-md shadow-sm transition-all duration-200 overflow-hidden border-l-4 border-l-status-info cursor-move hover:shadow-lg ${isCompact ? 'px-2 py-0.5' : 'px-2 py-1'
+                      } ${isDragging ? 'opacity-50 scale-105 shadow-lg border-status-info' : ''
                       } ${(draggedTask || draggedFromOutside) && !isDragging ? 'pointer-events-none' : 'z-10 hover:z-20'
                       }`}
                     style={isCompact ? { ...position, minHeight: '1.5rem' } : position}

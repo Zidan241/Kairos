@@ -19,7 +19,7 @@ export default function SidebarStatusAnimation() {
         {/* Outer glow */}
         <div
           className={`absolute inset-0 blur-md rounded-full transition-colors duration-1000 ${
-            isActive ? "bg-purple-500/25" : "bg-muted-foreground/8"
+            isActive ? "bg-status-active/25" : "bg-muted-foreground/8"
           }`}
           style={{
             animation: isActive
@@ -31,7 +31,7 @@ export default function SidebarStatusAnimation() {
         <div
           className={`absolute inset-[2px] transition-all duration-1000 ${
             isActive
-              ? "bg-gradient-to-br from-violet-400 via-purple-500 to-fuchsia-500 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
+              ? "bg-status-active shadow-[0_0_12px_hsl(var(--active)/0.3)]"
               : "bg-gradient-to-br from-muted-foreground/15 to-muted-foreground/8"
           }`}
           style={{
@@ -45,7 +45,7 @@ export default function SidebarStatusAnimation() {
           className={`absolute transition-opacity duration-1000 ${
             collapsed ? "inset-[6px]" : "inset-[10px]"
           } ${
-            isActive ? "bg-violet-300/40" : "bg-muted-foreground/5"
+            isActive ? "bg-status-active/40" : "bg-muted-foreground/5"
           }`}
           style={{
             animation: isActive
@@ -57,7 +57,7 @@ export default function SidebarStatusAnimation() {
 
       {!collapsed && (
         <span className={`text-[10px] font-medium tracking-wider uppercase transition-colors duration-1000 ${
-          isActive ? "text-purple-500/70" : "text-muted-foreground/30"
+          isActive ? "text-status-active/70" : "text-muted-foreground/30"
         }`}/>
       )}
     </div>

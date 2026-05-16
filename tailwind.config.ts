@@ -76,11 +76,32 @@ export default {
           border: "var(--sidebar-accent-border)"
         },
         status: {
-          online: "rgb(34 197 94)",
-          away: "rgb(245 158 11)",
-          busy: "rgb(239 68 68)",
-          offline: "rgb(156 163 175)",
+          success: {
+            DEFAULT: "hsl(var(--success) / <alpha-value>)",
+            foreground: "hsl(var(--success-foreground) / <alpha-value>)",
+          },
+          warning: {
+            DEFAULT: "hsl(var(--warning) / <alpha-value>)",
+            foreground: "hsl(var(--warning-foreground) / <alpha-value>)",
+          },
+          danger: {
+            DEFAULT: "hsl(var(--danger) / <alpha-value>)",
+            foreground: "hsl(var(--danger-foreground) / <alpha-value>)",
+          },
+          info: {
+            DEFAULT: "hsl(var(--info) / <alpha-value>)",
+            foreground: "hsl(var(--info-foreground) / <alpha-value>)",
+          },
+          active: {
+            DEFAULT: "hsl(var(--active) / <alpha-value>)",
+            foreground: "hsl(var(--active-foreground) / <alpha-value>)",
+          },
+          neutral: {
+            DEFAULT: "hsl(var(--neutral) / <alpha-value>)",
+            foreground: "hsl(var(--neutral-foreground) / <alpha-value>)",
+          },
         },
+        overlay: "hsl(var(--overlay) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

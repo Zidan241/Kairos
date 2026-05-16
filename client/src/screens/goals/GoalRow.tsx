@@ -17,7 +17,7 @@ function SubtaskRow({ s }: { s: GoalDetails['subtasks'][number] }) {
     <div className="flex items-center justify-between px-2 py-1.5 rounded border text-xs">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          {s.isCompleted && <Check className="h-3 w-3 text-emerald-500 shrink-0" />}
+          {s.isCompleted && <Check className="h-3 w-3 text-status-success shrink-0" />}
           <span className={`truncate ${s.isCompleted ? "line-through text-muted-foreground" : ""}`}>{s.title}</span>
         </div>
         <span className="text-[10px] text-muted-foreground/60 pl-5">↳ {s.parentTaskTitle}</span>
