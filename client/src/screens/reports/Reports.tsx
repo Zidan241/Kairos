@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, RefreshCw } from "lucide-react";
@@ -10,7 +9,6 @@ import DayReport from "./DayReport";
 import DateRangeSelector from "./DateRangeSelector";
 import { useDayReport } from "@/hooks/useMetrics";
 import { dateUtils } from "@shared/utils";
-import { TaskHelpers } from "@/lib/taskHelpers";
 import { getWeekStart } from "@/lib/utils";
 
 export default function Reports() {
@@ -44,7 +42,6 @@ export default function Reports() {
   // Day tab
   const dayDateStr = dateUtils.formatDate(selectedDate);
   const { data: dayReport, isLoading: dayLoading, refetch: refetchDay, isFetching: dayFetching } = useDayReport(dayDateStr);
-  const reflectSummary = dayReport?.reflect;
 
   async function handleRefresh() {
     if (activeTab === 'day') {
@@ -107,54 +104,6 @@ export default function Reports() {
             </PopoverContent>
           </Popover>
         </div>
-      </div>
-
-      {/* Compact summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Habits Card */}
-        <Card>
-          <CardContent className="py-3 px-4">
-            <span className="text-sm">
-              {reflectSummary ? (
-                reflectSummary.habits.due > 0
-                  ? <>Habits: <span className="font-medium">{reflectSummary.habits.done} done</span> · <span className="text-status-warning">{reflectSummary.habits.skipped} skipped</span> · {reflectSummary.habits.missed} missed</>
-                  : <>Habits: <span className="text-muted-foreground">0 due</span></>
-              ) : (
-                <span className="text-muted-foreground">Habits: —</span>
-              )}
-            </span>
-          </CardContent>
-        </Card>
-
-        {/* Tasks Card */}
-        <Card>
-          <CardContent className="py-3 px-4">
-            <span className="text-sm">
-              {reflectSummary ? (
-                reflectSummary.tasks.planned > 0
-                  ? <>Tasks: Planned <span className="font-medium">{reflectSummary.tasks.planned}</span> · Done {reflectSummary.tasks.done} · Rescheduled {reflectSummary.tasks.rescheduled}</>
-                  : <>Tasks: <span className="text-muted-foreground">0 planned</span></>
-              ) : (
-                <span className="text-muted-foreground">Tasks: —</span>
-              )}
-            </span>
-          </CardContent>
-        </Card>
-
-        {/* Goals Card */}
-        <Card>
-          <CardContent className="py-3 px-4">
-            <span className="text-sm">
-              {reflectSummary ? (
-                reflectSummary.goals.perGoal.length > 0
-                  ? <>Goals: <span className="font-medium">{reflectSummary.goals.progressed}/{reflectSummary.goals.total} progressed</span> · {reflectSummary.goals.perGoal.map(g => `${g.title} (${TaskHelpers.formatTime(g.minutes)})`).join(' · ')}</>
-                  : <>Goals: <span className="text-muted-foreground">no activity</span></>
-              ) : (
-                <span className="text-muted-foreground">Goals: —</span>
-              )}
-            </span>
-          </CardContent>
-        </Card>
       </div>
 
       <Tabs defaultValue="day" className="w-full" onValueChange={(value) => setActiveTab(value as 'day' | 'week' | 'month')}>

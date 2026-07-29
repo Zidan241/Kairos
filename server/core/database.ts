@@ -20,8 +20,11 @@ try {
   migrate(db, { migrationsFolder });
   console.log("✅ Database migrations applied");
 } catch (error) {
+  // A failed migration can leave the app running against an incompatible schema,
+  // silently corrupting data. Fail loudly so the process exits and the Electron
+  // server manager surfaces the error to the user instead of continuing blindly.
   console.error("❌ Migration failed:", error);
-  // Don't crash - the app may still work with an existing schema
+  throw new Error(`Database migration failed: ${error instanceof Error ? error.message : String(error)}`);
 }
 // Export for cleanup
 export const closeDatabase = () => sqlite.close();

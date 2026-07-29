@@ -80,7 +80,17 @@ export function calculateAppUsage(buckets: Array<{ apps: unknown }>): AppUsage[]
 
   for (const bucket of buckets) {
     if (bucket.apps) {
-      const appsData = typeof bucket.apps === 'string' ? JSON.parse(bucket.apps) : bucket.apps;
+      let appsData: Record<string, unknown>;
+      if (typeof bucket.apps === 'string') {
+        try {
+          appsData = JSON.parse(bucket.apps);
+        } catch {
+          continue; // Skip buckets with malformed apps JSON rather than failing the request
+        }
+      } else {
+        appsData = bucket.apps as Record<string, unknown>;
+      }
+      if (!appsData || typeof appsData !== 'object') continue;
       for (const [appName, seconds] of Object.entries(appsData)) {
         const minutes = (seconds as number) / 60;
         const currentMinutes = appUsageMap.get(appName) || 0;

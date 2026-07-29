@@ -36,6 +36,13 @@
       "when": 1776087214558,
       "tag": "0004_gifted_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776087214559,
+      "tag": "0005_add_indexes",
+      "breakpoints": true
     }
   ]
 }

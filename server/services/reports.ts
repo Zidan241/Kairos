@@ -1,12 +1,12 @@
 import {
-  type DailyMetrics, type DayReportMetrics, type ReflectSummary, type TimelineSegment,
+  type DailyMetrics, type DayReportMetrics, type TimelineSegment,
 } from "@shared/types";
 import {
-  activityBuckets, workSessionsHistory, subtasks, tasks, taskScheduleHistory,
-  type Goal, type ActivityBucket,
+  activityBuckets, workSessionsHistory, subtasks, taskScheduleHistory,
+  type ActivityBucket,
 } from "@shared/schema";
 import { db } from "../core/database";
-import { eq, and, inArray, isNotNull, sql } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { dateUtils } from "@shared/utils";
 import { ACTIVITY_CONFIG } from "@shared/constants";
 import { calculateTimeBreakdown, calculateAppUsage } from "./calculations";
@@ -42,8 +42,7 @@ export async function getDailyMetrics(date: string): Promise<DailyMetrics> {
   return { date, timeBreakdown };
 }
 
-// Goals are passed in to avoid circular dependency with goals module.
-export async function getDayReportMetrics(date: string, goals: Goal[]): Promise<DayReportMetrics> {
+export async function getDayReportMetrics(date: string): Promise<DayReportMetrics> {
   const buckets = await db.select().from(activityBuckets)
     .where(eq(activityBuckets.date, date))
     .orderBy(activityBuckets.startTime);
@@ -62,7 +61,6 @@ export async function getDayReportMetrics(date: string, goals: Goal[]): Promise<
   const hourlyEfficiency = calculateHourlyEfficiency(buckets);
   const planExecution = await buildPlanExecution(date, buckets);
   const topApps = calculateAppUsage(buckets).slice(0, 3);
-  const reflect = await buildReflectSummary(date, planExecution, goals);
 
   return {
     date,
@@ -72,7 +70,6 @@ export async function getDayReportMetrics(date: string, goals: Goal[]): Promise<
     hourlyEfficiency,
     planExecution,
     topApps,
-    reflect,
   };
 }
 
@@ -129,75 +126,6 @@ async function buildPlanExecution(
     workedMinutes: Math.round(workedMinutes),
     trackedMinutes: Math.round(trackedMinutes),
     estimationAccuracy,
-  };
-}
-
-async function buildReflectSummary(
-  date: string,
-  planExecution: DayReportMetrics['planExecution'],
-  allGoals: Goal[],
-): Promise<ReflectSummary> {
-  const habitSubtasks = await db.select({
-    status: subtasks.status,
-  }).from(subtasks)
-    .innerJoin(tasks, eq(subtasks.parentTaskId, tasks.id))
-    .where(and(
-      eq(tasks.isHabit, true),
-      eq(subtasks.scheduledDate, date),
-    ));
-
-  const habitsDone = habitSubtasks.filter(s => s.status === 'completed').length;
-  const habitsSkipped = habitSubtasks.filter(s => s.status === 'skipped').length;
-  const habitsMissed = habitSubtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length;
-
-  const tasksCard = {
-    planned: planExecution.totalCount,
-    done: planExecution.completedCount,
-    rescheduled: planExecution.totalCount - planExecution.completedCount,
-  };
-
-  const effectiveGoalId = sql<number>`CASE WHEN ${subtasks.overrideGoal} = 1 THEN ${subtasks.goalId} ELSE COALESCE(${subtasks.goalId}, ${tasks.goalId}) END`;
-
-  const minutesRows = await db.select({
-    goalId: effectiveGoalId,
-    total: sql<number>`COALESCE(SUM(${workSessionsHistory.durationMinutes}), 0)`,
-  }).from(workSessionsHistory)
-    .innerJoin(subtasks, eq(workSessionsHistory.subtaskId, subtasks.id))
-    .innerJoin(tasks, eq(subtasks.parentTaskId, tasks.id))
-    .where(and(
-      isNotNull(effectiveGoalId),
-      eq(workSessionsHistory.date, date),
-    ))
-    .groupBy(effectiveGoalId);
-
-  const completionRows = await db.select({
-    goalId: effectiveGoalId,
-    count: sql<number>`count(*)`,
-  }).from(subtasks)
-    .innerJoin(tasks, eq(subtasks.parentTaskId, tasks.id))
-    .where(and(
-      isNotNull(effectiveGoalId),
-      eq(subtasks.scheduledDate, date),
-      eq(subtasks.status, 'completed'),
-    ))
-    .groupBy(effectiveGoalId);
-
-  const minutesMap = new Map(minutesRows.map(r => [r.goalId, Math.round(r.total)]));
-  const completionMap = new Map(completionRows.map(r => [r.goalId, r.count]));
-
-  const perGoal: ReflectSummary['goals']['perGoal'] = [];
-  for (const goal of allGoals) {
-    const minutes = minutesMap.get(goal.id) ?? 0;
-    const completions = completionMap.get(goal.id) ?? 0;
-    if (minutes > 0 || completions > 0) {
-      perGoal.push({ id: goal.id, title: goal.title, minutes });
-    }
-  }
-
-  return {
-    habits: { done: habitsDone, skipped: habitsSkipped, missed: habitsMissed, due: habitSubtasks.length },
-    tasks: tasksCard,
-    goals: { total: allGoals.length, progressed: perGoal.length, perGoal },
   };
 }
 

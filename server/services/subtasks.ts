@@ -28,19 +28,30 @@ function sanitizeGoalOverride<T extends Partial<Pick<InsertSubtask, 'goalId' | '
   return data;
 }
 
+// Transaction context type derived from the drizzle db (bun-sqlite is synchronous).
+type DrizzleTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Pure read of the currently active subtask (no side effects).
+function selectActive(exec: typeof db | DrizzleTx): Subtask | undefined {
+  return (exec.select().from(subtasks).where(eq(subtasks.status, 'active')).limit(1).all() as Subtask[])[0];
+}
+
 export async function createSubtask(subtask: InsertSubtask): Promise<Subtask> {
-  const result = await db.insert(subtasks).values(sanitizeGoalOverride(subtask)).returning() as Subtask[];
-  if (!result[0]) throw new Error("Failed to create subtask");
-  if (result[0].scheduledDate) {
-    await db.insert(taskScheduleHistory).values({ subtaskId: result[0].id, scheduledDate: result[0].scheduledDate });
-  }
-  return result[0];
+  const normalized = sanitizeGoalOverride({ ...subtask });
+  return db.transaction((tx) => {
+    const result = tx.insert(subtasks).values(normalized).returning().all() as Subtask[];
+    if (!result[0]) throw new Error("Failed to create subtask");
+    if (result[0].scheduledDate) {
+      tx.insert(taskScheduleHistory).values({ subtaskId: result[0].id, scheduledDate: result[0].scheduledDate }).run();
+    }
+    return result[0];
+  });
 }
 
 // Handles status transitions: sets completedAt, manages activation/deactivation.
 export async function updateSubtask(id: number, updates: Partial<UpdateSubtask>): Promise<Subtask | undefined> {
-  const finalUpdates: Partial<UpdateSubtask> & { activatedAt?: string | null } = { ...sanitizeGoalOverride(updates) };
-  let completedAt;
+  const finalUpdates: Partial<UpdateSubtask> & { activatedAt?: string | null } = { ...sanitizeGoalOverride({ ...updates }) };
+  let completedAt: string | null | undefined;
   const now = new Date().toISOString();
 
   if (updates.status === 'completed') {
@@ -49,51 +60,57 @@ export async function updateSubtask(id: number, updates: Partial<UpdateSubtask>)
     completedAt = null;
   }
 
-  if (finalUpdates.status === 'active') {
-    await activate(id, now);
-    finalUpdates.activatedAt = now;
-  } else if (finalUpdates.status || finalUpdates.scheduledDate !== undefined) {
-    const active = await getActiveSubtask();
-    if (active?.id === id) {
-      await deactivate();
-      finalUpdates.status = finalUpdates.status ?? 'pending';
-      finalUpdates.activatedAt = null;
+  return db.transaction((tx) => {
+    if (finalUpdates.status === 'active') {
+      activateTx(tx, id, now);
+      finalUpdates.activatedAt = now;
+    } else if (finalUpdates.status || finalUpdates.scheduledDate !== undefined) {
+      const active = selectActive(tx);
+      if (active?.id === id) {
+        endCurrentWorkSessionTx(tx, now);
+        finalUpdates.status = finalUpdates.status ?? 'pending';
+        finalUpdates.activatedAt = null;
+      }
     }
-  }
 
-  const result = await db.update(subtasks)
-    .set({ ...finalUpdates, updatedAt: now, completedAt })
-    .where(eq(subtasks.id, id))
-    .returning() as Subtask[];
-  if (result[0] && finalUpdates.scheduledDate) {
-    await db.insert(taskScheduleHistory).values({ subtaskId: id, scheduledDate: finalUpdates.scheduledDate });
-  }
-  return result[0];
+    const result = tx.update(subtasks)
+      .set({ ...finalUpdates, updatedAt: now, completedAt })
+      .where(eq(subtasks.id, id))
+      .returning().all() as Subtask[];
+    if (result[0] && finalUpdates.scheduledDate) {
+      tx.insert(taskScheduleHistory).values({ subtaskId: id, scheduledDate: finalUpdates.scheduledDate }).run();
+    }
+    return result[0];
+  });
 }
 
 export async function deleteSubtask(id: number): Promise<boolean> {
-  const active = await getActiveSubtask();
-  if (active?.id === id) {
-    await deactivate();
-  }
-  const result = await db.delete(subtasks).where(eq(subtasks.id, id)) as any;
-  return result.changes > 0;
+  return db.transaction((tx) => {
+    const active = selectActive(tx);
+    if (active?.id === id) {
+      endCurrentWorkSessionTx(tx, new Date().toISOString());
+    }
+    const deleted = tx.delete(subtasks).where(eq(subtasks.id, id)).returning().all() as Subtask[];
+    return deleted.length > 0;
+  });
 }
 
 // =========================================================================
 // Exports — Queries
 // =========================================================================
 
-// Returns the currently active subtask, auto-deactivating if it's from a past day.
+// Returns the currently active subtask, atomically deactivating it if it's from a past day.
 export async function getActiveSubtask(): Promise<Subtask | undefined> {
-  const result = await db.select().from(subtasks).where(eq(subtasks.status, 'active')).limit(1);
-  const active = result[0];
+  const active = selectActive(db);
   if (!active) return undefined;
 
   const today = dateUtils.getTodayDate();
   if (active.scheduledDate && active.scheduledDate < today) {
-    await deactivate();
-    await db.update(subtasks).set({ status: 'pending', activatedAt: null, updatedAt: new Date().toISOString() }).where(eq(subtasks.id, active.id));
+    const now = new Date().toISOString();
+    db.transaction((tx) => {
+      endCurrentWorkSessionTx(tx, now);
+      tx.update(subtasks).set({ status: 'pending', activatedAt: null, updatedAt: now }).where(eq(subtasks.id, active.id)).run();
+    });
     return undefined;
   }
 
@@ -108,25 +125,22 @@ export async function getScheduledSubtasks(date: string): Promise<Subtask[]> {
 
 // Toggles between 'skipped' and 'pending'. Deactivates if currently active.
 export async function toggleSkip(subtaskId: number): Promise<Subtask | undefined> {
-  const subtask = await db.select().from(subtasks).where(eq(subtasks.id, subtaskId)).limit(1);
-  if (!subtask[0]) return undefined;
+  const now = new Date().toISOString();
+  return db.transaction((tx) => {
+    const current = (tx.select().from(subtasks).where(eq(subtasks.id, subtaskId)).limit(1).all() as Subtask[])[0];
+    if (!current) return undefined;
 
-  const current = subtask[0];
+    if (current.status === 'active') {
+      endCurrentWorkSessionTx(tx, now);
+    }
 
-  if (current.status === 'active') {
-    await deactivate();
-  }
-
-  const newStatus = current.status === 'skipped' ? 'pending' : 'skipped';
-  const result = await db.update(subtasks)
-    .set({
-      status: newStatus,
-      activatedAt: null,
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(subtasks.id, subtaskId))
-    .returning() as Subtask[];
-  return result[0];
+    const newStatus = current.status === 'skipped' ? 'pending' : 'skipped';
+    const result = tx.update(subtasks)
+      .set({ status: newStatus, activatedAt: null, updatedAt: now })
+      .where(eq(subtasks.id, subtaskId))
+      .returning().all() as Subtask[];
+    return result[0];
+  });
 }
 
 // =========================================================================
@@ -134,7 +148,7 @@ export async function toggleSkip(subtaskId: number): Promise<Subtask | undefined
 // =========================================================================
 
 export async function deactivate(): Promise<void> {
-  await endCurrentWorkSession(new Date().toISOString());
+  db.transaction((tx) => endCurrentWorkSessionTx(tx, new Date().toISOString()));
 }
 
 // =========================================================================
@@ -218,34 +232,36 @@ export async function getSubtaskMetricsBulk(subtaskIds: number[]): Promise<Recor
 // =========================================================================
 
 // Ends previous work session, deactivates previous subtask, starts new session.
-async function activate(subtaskId: number, now: string): Promise<void> {
-  await endCurrentWorkSession(now);
-  await db.update(subtasks).set({ status: 'pending', activatedAt: null, updatedAt: now }).where(eq(subtasks.status, 'active'));
-  await startWorkSession(subtaskId, now);
+function activateTx(tx: DrizzleTx, subtaskId: number, now: string): void {
+  endCurrentWorkSessionTx(tx, now);
+  tx.update(subtasks).set({ status: 'pending', activatedAt: null, updatedAt: now }).where(eq(subtasks.status, 'active')).run();
+  startWorkSessionTx(tx, subtaskId, now);
 }
 
-async function startWorkSession(subtaskId: number, now: string): Promise<void> {
+function startWorkSessionTx(tx: DrizzleTx, subtaskId: number, now: string): void {
   const today = dateUtils.getTodayDate();
-  await db.insert(workSessionsHistory).values({
+  tx.insert(workSessionsHistory).values({
     subtaskId,
     startedAt: now,
     date: today,
-  });
+  }).run();
 }
 
 // Closes any open work session by setting endedAt and computing duration.
-async function endCurrentWorkSession(now: string): Promise<void> {
-  const openSession = await db.select().from(workSessionsHistory)
+function endCurrentWorkSessionTx(tx: DrizzleTx, now: string): void {
+  const openSession = tx.select().from(workSessionsHistory)
     .where(isNull(workSessionsHistory.endedAt))
-    .limit(1);
+    .limit(1)
+    .all();
 
   if (openSession[0]) {
     const startMs = new Date(openSession[0].startedAt).getTime();
     const endMs = new Date(now).getTime();
     const durationMinutes = Math.max(0, (endMs - startMs) / 60000);
 
-    await db.update(workSessionsHistory)
+    tx.update(workSessionsHistory)
       .set({ endedAt: now, durationMinutes, updatedAt: now })
-      .where(eq(workSessionsHistory.id, openSession[0].id));
+      .where(eq(workSessionsHistory.id, openSession[0].id))
+      .run();
   }
 }

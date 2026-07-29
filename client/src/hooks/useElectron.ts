@@ -3,7 +3,7 @@
  * Safely handles running in both Electron and browser environments.
  */
 
-export interface AppSettings {};
+export type AppSettings = Record<string, never>;
 
 export interface ElectronAPI {
   // Application info

@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { Router } from "express";
 import { createServer, type Server } from "http";
-import { insertTaskSchema, updateTaskSchema, insertSubtaskSchema, insertHabitSchema, updateHabitSchema, insertGoalSchema, updateGoalSchema } from "@shared/schema";
+import { fromError } from "zod-validation-error";
+import { insertTaskSchema, updateTaskSchema, insertSubtaskSchema, updateSubtaskSchema, insertHabitSchema, updateHabitSchema, insertGoalSchema, updateGoalSchema } from "@shared/schema";
 import { dateUtils } from "@shared/utils";
 import { createTask, updateTask, deleteTask, getTasksWithMetrics, getDayPlanWithMetrics } from "./services/tasks";
 import { createSubtask, updateSubtask, deleteSubtask, getActiveSubtask, getScheduledSubtasks, toggleSkip, getWorkSessionsBySubtask, getWorkSessionsByDate } from "./services/subtasks";
@@ -12,10 +13,25 @@ import { getDailyMetrics, getDayReportMetrics } from "./services/reports";
 import { checkTaskTransition } from "./services/bucketAnalysis";
 import { getDatabaseInfo, createBackup } from "./services/database";
 import { activityWatchService } from "./services/activity/nodeActivityWatch";
+import { z } from "zod";
 
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) => {
+const asyncHandler = (fn: (req: any, res: any, next: any) => unknown) => (req: any, res: any, next: any) =>
   Promise.resolve(fn(req, res, next)).catch(next);
-};
+
+// Sends a readable 400 from a Zod error instead of leaking the raw error tree.
+function sendValidationError(res: any, error: z.ZodError): void {
+  res.status(400).json({ error: fromError(error).toString() });
+}
+
+// Validates a positive-integer route param, rejecting NaN / non-numeric ids.
+function validateIdParam(req: any, res: any, next: any, value: string): void {
+  const id = parseInt(value, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: `Invalid id parameter: "${value}"` });
+    return;
+  }
+  next();
+}
 
 function parseDays(raw: string | undefined, fallback = 30): number {
   const parsed = parseInt(raw as string);
@@ -26,6 +42,10 @@ function parseDays(raw: string | undefined, fallback = 30): number {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const router = Router();
+
+  // Reject non-numeric / non-positive id params before they reach handlers.
+  router.param("id", validateIdParam);
+  router.param("subtaskId", validateIdParam);
 
   // =========================================================================
   // System
@@ -61,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.post("/tasks", asyncHandler(async (req: any, res: any) => {
     const validation = insertTaskSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const task = await createTask(validation.data);
     res.status(201).json(task);
@@ -70,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.put("/tasks/:id", asyncHandler(async (req: any, res: any) => {
     const validation = updateTaskSchema.partial().safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const task = await updateTask(parseInt(req.params.id), validation.data);
     if (!task) {
@@ -94,16 +114,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.post("/subtasks", asyncHandler(async (req: any, res: any) => {
     const validation = insertSubtaskSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const subtask = await createSubtask(validation.data);
     res.status(201).json(subtask);
   }));
 
   router.put("/subtasks/:id", asyncHandler(async (req: any, res: any) => {
-    const validation = insertSubtaskSchema.partial().safeParse(req.body);
+    const validation = updateSubtaskSchema.partial().safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const subtask = await updateSubtask(parseInt(req.params.id), validation.data);
     if (!subtask) {
@@ -167,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.post("/habits", asyncHandler(async (req: any, res: any) => {
     const validation = insertHabitSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const habit = await createHabit(validation.data);
     res.status(201).json(habit);
@@ -176,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.put("/habits/:id", asyncHandler(async (req: any, res: any) => {
     const validation = updateHabitSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const habit = await updateHabit(parseInt(req.params.id), validation.data);
     if (!habit) {
@@ -220,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.post("/goals", asyncHandler(async (req: any, res: any) => {
     const validation = insertGoalSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const goal = await createGoal(validation.data);
     res.status(201).json(goal);
@@ -229,7 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.patch("/goals/:id", asyncHandler(async (req: any, res: any) => {
     const validation = updateGoalSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error });
+      return sendValidationError(res, validation.error);
     }
     const goal = await updateGoal(parseInt(req.params.id), validation.data);
     if (!goal) {
@@ -270,8 +290,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   router.put("/notes/:subtaskId", asyncHandler(async (req: any, res: any) => {
-    const { content } = req.body;
-    const saved = await saveNote(parseInt(req.params.subtaskId), content ?? '');
+    const validation = z.object({
+      content: z.string().max(100_000, "Note content too long").optional(),
+    }).safeParse(req.body);
+    if (!validation.success) {
+      return sendValidationError(res, validation.error);
+    }
+    const saved = await saveNote(parseInt(req.params.subtaskId), validation.data.content ?? '');
     if (!saved) {
       return res.status(404).json({ error: "Subtask not found" });
     }
@@ -291,8 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.get("/analytics/day-report", asyncHandler(async (req: any, res: any) => {
     const date = (req.query.date as string) || dateUtils.getTodayDate();
-    const goals = await getGoals(false);
-    const report = await getDayReportMetrics(date, goals);
+    const report = await getDayReportMetrics(date);
     res.json(report);
   }));
 

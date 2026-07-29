@@ -18,7 +18,7 @@ const weekStartDay = getLocaleWeekStart(); // 0 = Sunday, 1 = Monday
 function getWeeksInMonth(year: number, month: number) {
   const weeks: Date[] = [];
   const first = new Date(year, month, 1);
-  let current = getWeekStart(first);
+  const current = getWeekStart(first);
 
   // Collect week starts that overlap with this month
   while (current.getMonth() <= month && current.getFullYear() === year || current < first) {

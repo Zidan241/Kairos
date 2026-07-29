@@ -10,11 +10,13 @@ import { useToast } from "@/hooks/useToast";
 import { useConnectionStatus } from "@/hooks/useConnectionStatus";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLocaleWeekStart, setWeekStart } from "@/lib/utils";
+import { useTheme } from "next-themes";
 
 export default function Settings() {
   const electron = useElectron();
   const isElectronApp = isElectron();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const { connected: activityWatchConnected, paused: activityWatchPaused, loading: statusLoading, lastChecked, refresh: refreshStatus } = useConnectionStatus();
 
   const statusLoaded = !statusLoading;
@@ -99,6 +101,34 @@ export default function Settings() {
               <SelectContent>
                 <SelectItem value="0">Sunday</SelectItem>
                 <SelectItem value="1">Monday</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Appearance */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Palette className="h-5 w-5" />
+            <CardTitle>Appearance</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Theme</Label>
+              <p className="text-sm text-muted-foreground">Choose light, dark, or follow your system</p>
+            </div>
+            <Select value={theme ?? "system"} onValueChange={setTheme}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+                <SelectItem value="system">System</SelectItem>
               </SelectContent>
             </Select>
           </div>

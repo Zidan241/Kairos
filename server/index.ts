@@ -12,8 +12,25 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Allow cross-origin requests from Electron renderer / Vite dev server
-app.use(cors());
+// Restrict cross-origin requests to the Electron renderer (file:// -> Origin "null")
+// and local dev servers. Requests with no Origin (same-origin, health checks) are
+// allowed. Any real remote website origin (http(s)://...) is rejected so arbitrary
+// pages a user visits cannot reach this local API.
+const isAllowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin || origin === "null") return true;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+};
+
+app.use(cors({
+  origin: (origin, callback) => {
+    callback(null, isAllowedOrigin(origin));
+  },
+}));
 
 // Setup request logging middleware
 app.use(setupLoggingMiddleware());

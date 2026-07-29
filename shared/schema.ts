@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -37,7 +37,10 @@ export const tasks = sqliteTable("tasks", {
   isArchived: integer({ mode: "boolean" }).notNull().default(false),
   goalId: integer().references(() => goals.id, { onDelete: "set null" }),
   ...timestamps,
-});
+}, (table) => [
+  index("idx_tasks_isHabit").on(table.isHabit),
+  index("idx_tasks_goalId").on(table.goalId),
+]);
 
 // Subtasks table - contains the actual work items
 export const subtasks = sqliteTable("subtasks", {
@@ -55,7 +58,12 @@ export const subtasks = sqliteTable("subtasks", {
   overrideGoal: integer({ mode: "boolean" }).notNull().default(false),
   notes: text(), // Markdown notes content
   ...timestamps,
-});
+}, (table) => [
+  index("idx_subtasks_scheduledDate").on(table.scheduledDate),
+  index("idx_subtasks_parentTaskId").on(table.parentTaskId),
+  index("idx_subtasks_status").on(table.status),
+  index("idx_subtasks_goalId").on(table.goalId),
+]);
 
 // Task schedules table - tracks when tasks are scheduled across different dates
 export const taskScheduleHistory = sqliteTable("taskScheduleHistory", {
@@ -63,7 +71,10 @@ export const taskScheduleHistory = sqliteTable("taskScheduleHistory", {
   subtaskId: integer().references(() => subtasks.id, { onDelete: "cascade" }).notNull(),
   scheduledDate: text(), // YYYY-MM-DD format
   createdAt: text().notNull().default(sql`(datetime('now'))`),
-});
+}, (table) => [
+  index("idx_taskScheduleHistory_subtaskId").on(table.subtaskId),
+  index("idx_taskScheduleHistory_scheduledDate").on(table.scheduledDate),
+]);
 
 // Work sessions history table - tracks actual start/stop times for active subtasks
 export const workSessionsHistory = sqliteTable("workSessionsHistory", {
@@ -74,7 +85,10 @@ export const workSessionsHistory = sqliteTable("workSessionsHistory", {
   durationMinutes: real(), // Computed on end: (endedAt - startedAt) in minutes
   date: text().notNull(), // YYYY-MM-DD — for efficient per-day queries
   ...timestamps,
-});
+}, (table) => [
+  index("idx_workSessionsHistory_subtaskId").on(table.subtaskId),
+  index("idx_workSessionsHistory_date").on(table.date),
+]);
 
 // Activity buckets table (5-minute classifications)
 export const activityBuckets = sqliteTable("activityBuckets", {
@@ -88,7 +102,12 @@ export const activityBuckets = sqliteTable("activityBuckets", {
   apps: text({ mode: "json" }), // JSON object { appName: seconds }
   workSessionApp: text(), // Primary app from work session analysis
   ...timestamps,
-});
+}, (table) => [
+  index("idx_activityBuckets_date").on(table.date),
+  index("idx_activityBuckets_subtaskId").on(table.subtaskId),
+  index("idx_activityBuckets_subtask_date").on(table.subtaskId, table.date),
+  index("idx_activityBuckets_startTime").on(table.startTime),
+]);
 
 // Reusable validation constraints
 const titleConstraints = z.string().min(1, "Title is required").max(200, "Title too long");

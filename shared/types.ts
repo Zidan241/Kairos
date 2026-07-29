@@ -126,12 +126,6 @@ export interface PlanExecution {
   estimationAccuracy: number;
 }
 
-export interface ReflectSummary {
-  habits: { done: number; skipped: number; missed: number; due: number };
-  tasks: { planned: number; done: number; rescheduled: number };
-  goals: { total: number; progressed: number; perGoal: Array<GoalRef & { minutes: number }> };
-}
-
 export interface TimelineSegment {
   start: number;  // hour as decimal (9.5 = 9:30 AM)
   end: number;
@@ -150,7 +144,6 @@ export interface DayReportMetrics {
   }>;
   planExecution: PlanExecution;
   topApps: AppUsage[];
-  reflect: ReflectSummary;
 }
 
 // ----------------------------

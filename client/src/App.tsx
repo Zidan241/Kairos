@@ -19,6 +19,7 @@ import NotFound from "@/screens/not-found";
 import { useState, useEffect } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { isElectron } from "@/hooks/useElectron";
+import { ThemeProvider } from "next-themes";
 
 const isMacElectron = isElectron() && navigator.platform.toLowerCase().includes('mac');
 const ONBOARDING_COMPLETE_KEY = "kairos_onboarding_complete";
@@ -45,10 +46,6 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Apply stored theme immediately so onboarding respects it
-    // const stored = localStorage.getItem("theme");
-    // document.documentElement.classList.toggle("dark", stored === "dark");
-
     const completed = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
     setShowOnboarding(completed !== "true");
   }, []);
@@ -72,18 +69,21 @@ export default function App() {
   if (showOnboarding) {
     return (
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Onboarding onComplete={handleOnboardingComplete} />
-            <Toaster />
-          </TooltipProvider>
-        </QueryClientProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme">
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <Onboarding onComplete={handleOnboardingComplete} />
+              <Toaster />
+            </TooltipProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     );
   }
 
   return (
     <ErrorBoundary>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme">
       <WouterRouter hook={useHashLocation}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -107,6 +107,7 @@ export default function App() {
       </TooltipProvider>
     </QueryClientProvider>
     </WouterRouter>
+    </ThemeProvider>
     </ErrorBoundary>
   );
 }

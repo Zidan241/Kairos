@@ -1,5 +1,6 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, MutationCache } from "@tanstack/react-query";
 import { isElectron } from "@/hooks/useElectron";
+import { toast } from "@/hooks/useToast";
 
 // Cache the resolved base URL so we only fetch the port once
 let _baseUrl: string = '';
@@ -64,7 +65,32 @@ export const getQueryFn: <T>() => QueryFunction<T> =
     return await res.json();
   };
 
+// Extracts a human-readable message from an error thrown as `${status}: ${body}`,
+// unwrapping a JSON `{ error }` body when present.
+function extractErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const match = raw.match(/^\d{3}:\s*(.*)$/s);
+  const body = match ? match[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.error === "string") return parsed.error;
+  } catch {
+    // body wasn't JSON — fall through to the raw text
+  }
+  return body || "Something went wrong. Please try again.";
+}
+
 export const queryClient = new QueryClient({
+  // Surface failed writes to the user instead of failing silently.
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Action failed",
+        description: extractErrorMessage(error),
+      });
+    },
+  }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn(),
